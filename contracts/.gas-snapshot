@@ -1,0 +1,6 @@
+CastVoteTest:testFuzzSupportAndMetadata(uint8,uint256,bytes32,bytes32) (runs: 256, μ: 192704, ~: 173815)
+CastVoteTest:testHappyPathStoresAndEmits() (gas: 221454)
+CastVoteTest:testOnlyAgentCanCast() (gas: 18692)
+CastVoteTest:testReplayProtection() (gas: 173448)
+CastVoteTest:testVerifyStepInvalidProof() (gas: 191898)
+CastVoteTest:testVerifyStepValidProof() (gas: 192513)
