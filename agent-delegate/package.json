@@ -21,6 +21,7 @@
     "helia": "^5.4.2",
     "keccak256": "^1.0.6",
     "merkletreejs": "^0.5.2",
+    "pinata": "^2.4.8",
     "uint8arrays": "^5.1.0",
     "uuid": "^11.1.0"
   },

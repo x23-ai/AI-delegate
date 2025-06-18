@@ -3,7 +3,7 @@ dotenv.config({ path: '.env', override: true });
 import { toUtf8Bytes, keccak256 } from 'ethers';
 import { TraceBuilder } from './trace.js';
 import { buildMerkleTree } from './utils/merkle.js';
-import { publishJsonToIpfs } from './utils/ipfs.js';
+import { uploadJsonToIpfs } from './utils/pinata.js';
 
 async function main() {
   const proposalId = Number(process.env.PROPOSAL_ID || '1');
@@ -30,16 +30,17 @@ async function main() {
   });
 
   const trace = traceBuilder.getTrace();
-  console.log('Built trace:', trace);
+  // console.log('Built trace:', trace);
 
   // 1) Publish to IPFS
-  const cid = await publishJsonToIpfs(trace);
+  const cid = await uploadJsonToIpfs(trace, `${agentId}-trace-proposal${proposalId}.json`);
   console.log('Published trace CID:', cid);
 
   // 2) Build Merkle root over steps
   const stepHashes = trace.steps.map((s) => keccak256(toUtf8Bytes(JSON.stringify(s))));
   const { root: merkleRoot } = buildMerkleTree(trace.steps.map((s) => JSON.stringify(s)));
   console.log('Merkle root:', merkleRoot);
+  console.log('step hashes:', stepHashes);
 
   // TODO: wire ethers signer + CastVote contract call here
 }
