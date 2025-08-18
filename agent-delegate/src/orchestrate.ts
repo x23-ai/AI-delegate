@@ -3,6 +3,7 @@ dotenv.config({ path: '.env', override: true });
 import { TraceBuilder } from './trace.js';
 import { X23Client } from './tools/x23.js';
 import { runConductor } from './agents/conductor.js';
+import { createLLM } from './llm/index.js';
 import type { AgentContext } from './agents/types.js';
 
 async function main() {
@@ -23,7 +24,8 @@ async function main() {
     cache: new Map(),
   };
 
-  const result = await runConductor(ctx);
+  const llm = createLLM();
+  const result = await runConductor(ctx, llm);
   console.log('Conductor pipeline result:', JSON.stringify(result, null, 2));
 }
 
@@ -31,4 +33,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-
