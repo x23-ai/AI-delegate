@@ -9,6 +9,7 @@ import type {
 } from '../types.js';
 import { TraceBuilder } from '../trace.js';
 import { X23Client } from '../tools/x23.js';
+import type { LLMClient } from '../llm/index.js';
 
 export type AgentKind =
   | 'conductor'
@@ -24,6 +25,7 @@ export interface AgentContext {
   trace: TraceBuilder;
   // space for other shared state (snapshots, temp caches, etc.)
   cache?: Map<string, unknown>;
+  llm?: LLMClient;
 }
 
 export interface Agent<TOutput> {
@@ -46,4 +48,3 @@ export type FactCheckerAgent = Agent<FactCheckOutput>;
 export type ReasonerAgent = Agent<ReasoningOutput>;
 export type DevilsAdvocateAgent = Agent<ChallengeOutput>;
 export type JudgeAgent = Agent<AdjudicationOutput>;
-

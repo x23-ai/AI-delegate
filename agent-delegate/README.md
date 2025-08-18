@@ -17,6 +17,9 @@ Recommended/Configurable:
 - `PROPOSAL_SOURCES`: Comma‑separated URLs (forums, specs, snapshots).
 - `ORCH_MAX_ITERS`: Max refinement iterations per stage (default `2`).
 - `JUDGE_CONFIDENCE`: Threshold 0..1 to accept judge decision (default `0.5`).
+- `FACT_MAX_ITERS`: Max refinement iterations per assumption in fact checking (default `2`).
+- `FACT_MIN_CITATIONS`: Minimum citations required to consider a claim sufficiently evidenced (default `1`).
+- `FACT_MIN_CONFIDENCE`: Minimum confidence (0..1) from the fact-checker’s LLM classification to accept a claim without further refinement (default `0.6`).
 
 On‑chain (not required initially):
 - `RPC_URL`, `AGENT_PRIVATE_KEY`, `CAST_VOTE_ADDRESS`, `GOVERNOR_ADDRESS` (used by `src/index.ts`).

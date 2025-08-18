@@ -12,9 +12,26 @@ import { ArbiterSolon } from './judge.js';
  * itself; instead it sequences specialist agents and records steps into the
  * ReasoningTrace via the shared TraceBuilder in the context.
  */
-export async function runConductor(ctx: AgentContext, llm?: LLMClient): Promise<ConductorPlan> {
+export async function runConductor(ctx: AgentContext, llmParam?: LLMClient): Promise<ConductorPlan> {
+  const llm = llmParam || ctx.llm;
   const maxIters = Number(process.env.ORCH_MAX_ITERS || 2);
   const judgeThreshold = Number(process.env.JUDGE_CONFIDENCE || 0.5);
+
+  async function scoreStage(stage: string, content: unknown): Promise<number | undefined> {
+    if (!llm) return undefined;
+    const res = await llm.extractJSON<{ confidence: number; notes?: string }>(
+      `You rate the ${stage} stage quality on a 0..1 scale. Consider completeness, clarity, and adequacy for downstream judgment. Return JSON { confidence:number, notes?:string }`,
+      JSON.stringify(content).slice(0, 6000),
+      {
+        type: 'object',
+        properties: { confidence: { type: 'number' }, notes: { type: 'string' } },
+        required: ['confidence'],
+      },
+      { schemaName: `${stage}Score` }
+    );
+    ctx.trace.addStep({ type: 'analysis', description: `${stage} confidence scored`, input: content, output: res });
+    return res.confidence;
+  }
 
   // 1) Planning loop
   let planning = await PlannerNavigator.run(ctx);
@@ -38,6 +55,10 @@ export async function runConductor(ctx: AgentContext, llm?: LLMClient): Promise<
     planning = await PlannerNavigator.run(ctx);
   }
 
+  // Score planning stage
+  planning.confidence = (await scoreStage('planning', planning)) ?? planning.confidence;
+  ctx.cache?.set('planning', planning);
+
   // 2) Fact checking loop
   let facts = await FactSleuth.run(ctx);
   for (let i = 0; i < maxIters; i++) {
@@ -58,6 +79,10 @@ export async function runConductor(ctx: AgentContext, llm?: LLMClient): Promise<
     if (evalFacts.satisfied) break;
     facts = await FactSleuth.run(ctx);
   }
+
+  // Score facts stage (use provided overall if present)
+  facts.overallConfidence = facts.overallConfidence ?? (await scoreStage('factCheck', facts)) ?? facts.overallConfidence;
+  ctx.cache?.set('facts', facts);
 
   // 3) Reasoning loop
   let reasoning = await CogitoSage.run(ctx);
@@ -80,6 +105,10 @@ export async function runConductor(ctx: AgentContext, llm?: LLMClient): Promise<
     reasoning = await CogitoSage.run(ctx);
   }
 
+  // Score reasoning stage
+  reasoning.confidence = (await scoreStage('reasoning', reasoning)) ?? reasoning.confidence;
+  ctx.cache?.set('reasoning', reasoning);
+
   // 4) Challenge loop
   let challenge = await RedTeamRaven.run(ctx);
   for (let i = 0; i < maxIters; i++) {
@@ -100,6 +129,10 @@ export async function runConductor(ctx: AgentContext, llm?: LLMClient): Promise<
     if (evalChallenge.robust) break;
     challenge = await RedTeamRaven.run(ctx);
   }
+
+  // Score challenge stage
+  challenge.confidence = (await scoreStage('challenge', challenge)) ?? challenge.confidence;
+  ctx.cache?.set('challenge', challenge);
 
   // 5) Adjudication loop
   let adjudication = await ArbiterSolon.run(ctx);

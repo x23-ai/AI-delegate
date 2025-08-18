@@ -16,17 +16,37 @@ async function main() {
 
   const trace = new TraceBuilder(proposalId, agentId);
   const x23 = new X23Client({ apiKey: process.env.X23_API_KEY });
+  const llm = createLLM();
 
   const ctx: AgentContext = {
     proposal: { id: proposalId, title: process.env.PROPOSAL_TITLE, description: process.env.PROPOSAL_DESC, sources },
     x23,
     trace,
     cache: new Map(),
+    llm,
   };
 
-  const llm = createLLM();
   const result = await runConductor(ctx, llm);
   console.log('Conductor pipeline result:', JSON.stringify(result, null, 2));
+
+  // Compact summary of stage confidences and outcomes
+  const fc = result.facts;
+  const counts = fc.claims.reduce(
+    (acc, c) => {
+      acc[c.status] = (acc[c.status] || 0) + 1;
+      return acc;
+    },
+    { supported: 0, contested: 0, unknown: 0 } as Record<string, number>
+  );
+  const summaryLines = [
+    '--- Summary ---',
+    `Planning confidence: ${result.planning.confidence ?? 'n/a'}`,
+    `Facts confidence:    ${result.facts.overallConfidence ?? 'n/a'} (supported:${counts.supported} contested:${counts.contested} unknown:${counts.unknown})`,
+    `Reasoning confidence:${result.reasoning.confidence ?? 'n/a'}`,
+    `Challenge confidence:${result.challenge.confidence ?? 'n/a'}`,
+    `Judge: ${result.adjudication.recommendation.toUpperCase()} (confidence: ${result.adjudication.confidence ?? 'n/a'})`,
+  ];
+  console.log(summaryLines.join('\n'));
 }
 
 main().catch((err) => {
