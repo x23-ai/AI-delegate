@@ -1,0 +1,13 @@
+{
+  "id": 1001,
+  "title": "[Temp Check] OP Grants Season 7 – Renewal and Scope",
+  "description": "Assess the Season 7 grants renewal: budget envelopes, milestone tracking, risk controls, and expected impact on on-chain metrics (TVL, stablecoin, bridges). Identify assumptions and validate against official docs and forum discussions.",
+  "payload": [
+    { "type": "discussion", "uri": "https://gov.optimism.io/t/op-grants-season-7/12345", "data": { "topicId": 12345 } },
+    { "type": "pullRequest", "uri": "https://github.com/ethereum-optimism/OPerating-manual/pull/99", "data": { "owner": "ethereum-optimism", "repo": "OPerating-manual", "id": 99 } },
+    { "type": "snapshot", "uri": "https://snapshot.org/#/opcollective.eth/proposal/0xabc..." },
+    { "type": "onchain", "data": { "chainId": 10, "governor": "treasuryGovernance", "proposalId": "0x..." } },
+    { "type": "discussion", "data": { "text": "Inline discussion snippet relevant to the proposal..." } },
+    { "type": "note", "data": "A plain string note with extra context." }
+  ]
+}

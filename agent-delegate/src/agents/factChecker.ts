@@ -17,7 +17,26 @@ export const FactSleuth: FactCheckerAgent = {
     // Seed searches to build an initial corpus
     const initialResults = await ctx.x23.hybridSearch({ query: seedQuery, topK: 12 });
     const official = await ctx.x23.officialHybridAnswer({ query: seedQuery, topK: 6 });
-    const corpus: DocChunk[] = [...initialResults, ...official.citations];
+
+    // Use any inline payload content as pseudo-docs
+    const payloadDocs: DocChunk[] = (ctx.proposal.payload || [])
+      .map((p, i) => {
+        const text = typeof p.data === 'string' ? p.data : (p?.data?.text as string | undefined);
+        if (text && typeof text === 'string' && text.trim()) {
+          return {
+            id: `payload-${i + 1}`,
+            title: `[payload:${p.type}] ${p.uri || ''}`.trim(),
+            uri: p.uri,
+            snippet: text.slice(0, 800),
+            source: 'payload',
+            score: 1,
+          } as DocChunk;
+        }
+        return undefined;
+      })
+      .filter(Boolean) as DocChunk[];
+
+    const corpus: DocChunk[] = [...payloadDocs, ...initialResults, ...official.citations];
 
     // Summarize corpus for assumption extraction
     const corpusDigest = corpus
@@ -25,7 +44,11 @@ export const FactSleuth: FactCheckerAgent = {
       .map((d, i) => `#${i + 1} ${d.title || d.uri} :: ${d.snippet || ''} :: ${d.uri || ''}`)
       .join('\n');
 
-    const sourcesList = (ctx.proposal.sources || []).map((s, i) => `S${i + 1}: ${s}`).join('\n');
+    // Digest of provided payload (if any)
+    const payloadDigest = (ctx.proposal.payload || [])
+      .slice(0, 8)
+      .map((p, i) => `P${i + 1}: [${p.type}] ${p.uri || ''} :: ${JSON.stringify(p.data || p.metadata || {}).slice(0, 160)}`)
+      .join('\n');
 
     // Extract assumptions and primary sources
     const assumptionPack = await llm.extractJSON<{
@@ -34,7 +57,7 @@ export const FactSleuth: FactCheckerAgent = {
       primarySources: string[];
     }>(
       'You extract proposal assumptions. Distinguish the core proposal from supporting docs. Return JSON with proposalSummary, assumptions (claim, priority, type), and primarySources (URIs).',
-      `Title: ${ctx.proposal.title}\nDescription: ${ctx.proposal.description}\nSources:\n${sourcesList}\nCorpusDigest:\n${corpusDigest}`,
+      `Title: ${ctx.proposal.title}\nDescription: ${ctx.proposal.description}\nProvidedPayload:\n${payloadDigest || '(none)'}\nCorpusDigest:\n${corpusDigest}`,
       {
         type: 'object',
         properties: {
@@ -80,7 +103,7 @@ export const FactSleuth: FactCheckerAgent = {
         realtime?: boolean;
       }>(
         'You are a tool selector for fact checking governance claims. Choose the best single tool and parameters to retrieve evidence that confirms or contests the claim. Prefer official docs first. Return JSON.',
-        `Claim: ${claim}\nHints: ${JSON.stringify(hints || [])}\nSeed title: ${ctx.proposal.title}\nSeed sources: ${(ctx.proposal.sources || []).join(', ')}`,
+        `Claim: ${claim}\nHints: ${JSON.stringify(hints || [])}\nSeedTitle: ${ctx.proposal.title}\nProvidedPayload:\n${payloadDigest || '(none)'}`,
         {
           type: 'object',
           properties: {
@@ -137,7 +160,9 @@ export const FactSleuth: FactCheckerAgent = {
 
     // Helper: Evaluate claim
     async function evalClaim(claim: string, docs: DocChunk[], answerHint?: string) {
-      const evidenceList = docs.slice(0, 8).map((d, i) => ({ idx: i + 1, title: d.title, uri: d.uri, snippet: d.snippet }));
+      // Always include a small slice of inline payload docs (if any) to aid classification
+      const docsWithPayload = [...payloadDocs.slice(0, 2), ...docs];
+      const evidenceList = docsWithPayload.slice(0, 8).map((d, i) => ({ idx: i + 1, title: d.title, uri: d.uri, snippet: d.snippet }));
       const classification = await llm.extractJSON<{ status: ClaimStatus; basis: string; citations: number[]; confidence: number }>(
         'Classify whether the claim is supported, contested, or unknown given the evidence. Cite indices of evidence used. Return JSON { status, basis, citations:number[], confidence:number in [0,1] }.',
         `Claim: ${claim}\nAnswerHint: ${answerHint || ''}\nEvidence:\n${evidenceList.map((e) => `[#${e.idx}] ${e.title} :: ${e.uri} :: ${e.snippet}`).join('\n')}`,
@@ -175,7 +200,7 @@ export const FactSleuth: FactCheckerAgent = {
       for (let iter = 0; iter < maxFactIters; iter++) {
         const plan = await llm.extractJSON<Awaited<ReturnType<typeof pickTool>>>(
           'Select the best single tool and parameters to retrieve evidence. Prefer official docs first. Avoid repeating prior failed plans. Return JSON.',
-          `Claim: ${a.claim}\nHints: ${JSON.stringify(a.evidenceHints || [])}\nPreviouslyTried: ${JSON.stringify(tried)}`,
+        `Claim: ${a.claim}\nHints: ${JSON.stringify(a.evidenceHints || [])}\nProvidedPayload:\n${payloadDigest || '(none)'}\nPreviouslyTried: ${JSON.stringify(tried)}`,
           {
             type: 'object',
             properties: {

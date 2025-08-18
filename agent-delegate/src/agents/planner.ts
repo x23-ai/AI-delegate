@@ -22,14 +22,17 @@ export const PlannerNavigator: PlannerAgent = {
       'Assemble pro/con reasoning draft',
     ];
 
+    const refs = (ctx.proposal.payload || [])
+      .filter((p) => !!p.uri)
+      .slice(0, 5)
+      .map((p) => ({ source: p.type || 'payload', uri: p.uri! }));
     ctx.trace.addStep({
       type: 'planning',
       description: 'Planner created initial objectives and tasks',
       output: { objectives, tasks },
-      references: ctx.proposal.sources?.map((uri) => ({ source: 'Seed', uri })) ?? [],
+      references: refs,
     });
 
     return { objectives, tasks, assumptions: [], risks: [] };
   },
 };
-

@@ -43,8 +43,8 @@ export interface ProposalInput {
   id: number;
   title?: string;
   description?: string;
-  // Optional URIs for forums, specs, snapshots, repos, etc.
-  sources?: string[];
+  // Arbitrary payload items (forum posts, PRs, code, onchain txs, etc.)
+  payload?: Array<{ type: string; uri?: string; data?: any; metadata?: Record<string, unknown> }>;
 }
 
 export interface PlanningOutput {
