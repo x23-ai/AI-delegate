@@ -29,6 +29,10 @@ On‑chain (not required initially):
 ## Notes
 - Reasoning models like `gpt5-mini` do not support `temperature`; the client omits it automatically.
 - Traces are recorded via `TraceBuilder` and can be published/hashed later.
+- Arithmetic checks: the fact checker evaluates simple expressions and common finance terms:
+  - k/M/B, million/billion/thousand, commas, currency `$`
+  - `% of` and `bps` (basis points)
+  - APR → APY with compounding (daily/weekly/monthly/quarterly/annual)
 
 ## Passing Proposal Parameters
 

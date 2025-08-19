@@ -3,6 +3,7 @@ import type { FactCheckOutput } from '../types.js';
 import type { LLMClient } from '../llm/index.js';
 import { createLLM } from '../llm/index.js';
 import type { DocChunk } from '../tools/x23.js';
+import { evaluateExpression, nearlyEqual } from '../utils/math.js';
 
 type ClaimStatus = 'supported' | 'contested' | 'unknown';
 
@@ -184,8 +185,70 @@ export const FactSleuth: FactCheckerAgent = {
       return { status: classification.status as ClaimStatus, basis: classification.basis, uris: chosenUris, confidence: classification.confidence };
     }
 
-    // Iterate over assumptions and fact-check with refinement
+    // Claims accumulator
     const claims: FactCheckOutput['claims'] = [];
+
+    // Arithmetic checks extraction and evaluation (before assumptions loop)
+    try {
+      const arithmeticPlan = await llm.extractJSON<{
+        checks: Array<{
+          title: string;
+          description?: string;
+          expression: string; // e.g., "5% of 200 + 1.2M"
+          claimedValue?: number; // optional claimed value to verify against
+          tolerance?: number; // optional absolute tolerance
+        }>;
+      }>(
+        'Extract arithmetic checks from the proposal description and payload. Return JSON { checks: [{ title, description?, expression, claimedValue?, tolerance? }] }. Use numeric suffixes (k,M,B) and % of patterns where helpful.',
+        `Title: ${ctx.proposal.title}\nDescription: ${ctx.proposal.description}\nProvidedPayload:\n${payloadDigest || '(none)'}\nCorpusDigest:\n${corpusDigest}`,
+        {
+          type: 'object',
+          properties: {
+            checks: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string' },
+                  description: { type: 'string' },
+                  expression: { type: 'string' },
+                  claimedValue: { type: 'number' },
+                  tolerance: { type: 'number' },
+                },
+                required: ['title', 'expression'],
+              },
+            },
+          },
+          required: ['checks'],
+        },
+        { schemaName: 'arithmeticPlan' }
+      );
+
+      if (arithmeticPlan?.checks?.length) {
+        for (const chk of arithmeticPlan.checks) {
+          try {
+            const value = evaluateExpression(chk.expression);
+            let status: ClaimStatus = 'supported';
+            if (typeof chk.claimedValue === 'number') {
+              const ok = nearlyEqual(value, chk.claimedValue, 1e-6, chk.tolerance ?? 1e-6);
+              status = ok ? 'supported' : 'contested';
+            }
+            const claimText = `Arithmetic: ${chk.title} => ${value}${typeof chk.claimedValue === 'number' ? ` (claimed ${chk.claimedValue})` : ''}`;
+            claims.push({ claim: claimText, status, citations: [], confidence: 0.9 });
+            ctx.trace.addStep({ type: 'factCheck', description: `Arithmetic check: ${chk.title}`, input: chk, output: { value, status } });
+          } catch (e) {
+            const claimText = `Arithmetic: ${chk.title} (failed to evaluate)`;
+            claims.push({ claim: claimText, status: 'unknown', citations: [], confidence: 0.3 });
+            ctx.trace.addStep({ type: 'factCheck', description: `Arithmetic check failed: ${chk.title}`, input: chk, output: { error: String(e) } });
+          }
+        }
+      }
+    } catch (e) {
+      // Non-fatal if arithmetic extraction fails
+      ctx.trace.addStep({ type: 'analysis', description: 'Arithmetic extraction failed', output: { error: String(e) } });
+    }
+
+    // Iterate over assumptions and fact-check with refinement
     const usedUris = new Set<string>();
     const maxFactIters = Number(process.env.FACT_MAX_ITERS || 2);
     const minCitations = Number(process.env.FACT_MIN_CITATIONS || 1);
