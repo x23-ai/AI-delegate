@@ -1,17 +1,39 @@
 import type { ReasonerAgent } from './types.js';
 import type { ReasoningOutput } from '../types.js';
+import { loadRolePrompt } from '../utils/roles.js';
+import type { LLMClient } from '../llm/index.js';
+import { createLLM } from '../llm/index.js';
 
 export const CogitoSage: ReasonerAgent = {
   kind: 'reasoner',
   codename: 'Cogito Sage',
   systemPromptPath: 'src/agents/roles/reasoner.md',
   async run(ctx): Promise<ReasoningOutput> {
-    // Scaffold: stitch together a minimal argument
-    const premises = [
-      'Proposal impact is material to stakeholders',
-      'Evidence gathered is sufficient and timely',
-    ];
-    const argument = 'Preliminary synthesis based on collected sources and planner objectives.';
+    const llm: LLMClient = ctx.llm || createLLM();
+    const role = loadRolePrompt(CogitoSage.systemPromptPath);
+    const facts: any = ctx.cache?.get('facts') || {};
+    const planning: any = ctx.cache?.get('planning') || {};
+    const input = {
+      proposal: { id: ctx.proposal.id, title: ctx.proposal.title, description: ctx.proposal.description },
+      planning,
+      facts,
+    };
+    const out = await llm.extractJSON<ReasoningOutput>(
+      `${role}\n\nForm structured reasoning for the proposal, grounded in the vetted facts and planning objectives. Be explicit about uncertainties.`,
+      JSON.stringify(input).slice(0, 6000),
+      {
+        type: 'object',
+        properties: {
+          argument: { type: 'string' },
+          premises: { type: 'array', items: { type: 'string' } },
+          uncertainties: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['argument', 'premises'],
+      },
+      { schemaName: 'reasoningOut', maxOutputTokens: 3000 }
+    );
+    const premises = out.premises || [];
+    const argument = out.argument || '';
 
     ctx.trace.addStep({
       type: 'reasoning',
@@ -19,7 +41,6 @@ export const CogitoSage: ReasonerAgent = {
       output: { premises, outline: argument },
     });
 
-    return { argument, premises, uncertainties: [] };
+    return { argument, premises, uncertainties: out.uncertainties || [] };
   },
 };
-

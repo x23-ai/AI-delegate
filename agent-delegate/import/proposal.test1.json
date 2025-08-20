@@ -1,0 +1,14 @@
+{
+  "id": 1001,
+  "title": "Security Council Season 7 Retroactive Funding Request",
+  "description": "The Optimism Security Council (OPSC) is requesting 346,920 OP from the Governance Fund as retroactive compensation for Season 7. During Season 7, the OPSC faced a significantly higher workload than anticipated when the original budget was approved. The OPSC is now signing for 5 OP Stack chains, in addition to OP Mainnet. In Season 7, the OPSC completed 19 upgrade ceremonies over a six-month period (vs. 6 in all of 2024). The amount requested will be divided equally across all Season 7 signers (13) and the Lead (1), with each recipient receiving 24,780 OP for Season 7. If approved, the amount requested will be distributed to Season 7 members of the Security Council, as soon as funds are made available. This proposal is eligible for Voting Cycle #40: https://gov.optimism.io/t/voting-cycle-roundup-40",
+  "payload": [
+    {
+      "type": "discussion",
+      "uri": "https://gov.optimism.io/t/voting-cycle-roundup-40/10215",
+      "data": {
+        "topicId": 10215
+      }
+    }
+  ]
+}

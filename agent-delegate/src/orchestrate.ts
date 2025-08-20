@@ -8,6 +8,7 @@ import type { AgentContext } from './agents/types.js';
 import { loadProposalParams, getCliArgs } from './utils/config.js';
 import { writeFileSync } from 'fs';
 import { resolve } from 'path';
+import { log } from './utils/logger.js';
 
 async function main() {
   const proposal = loadProposalParams();
@@ -26,7 +27,9 @@ async function main() {
     llm,
   };
 
+  log.info(`Orchestrator: starting run for proposal ${proposalId} (${proposal.title || 'untitled'})`);
   const result = await runConductor(ctx, llm);
+  log.info('Orchestrator: run complete');
   console.log('Conductor pipeline result:', JSON.stringify(result, null, 2));
 
   // Compact summary of stage confidences and outcomes

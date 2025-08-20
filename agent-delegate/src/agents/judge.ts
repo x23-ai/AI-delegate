@@ -2,6 +2,7 @@ import type { JudgeAgent } from './types.js';
 import type { AdjudicationOutput } from '../types.js';
 import type { LLMClient } from '../llm/index.js';
 import { createLLM } from '../llm/index.js';
+import { loadRolePrompt } from '../utils/roles.js';
 
 export const ArbiterSolon: JudgeAgent = {
   kind: 'judge',
@@ -9,6 +10,7 @@ export const ArbiterSolon: JudgeAgent = {
   systemPromptPath: 'src/agents/roles/judge.md',
   async run(ctx): Promise<AdjudicationOutput> {
     const llm: LLMClient = ctx.llm || createLLM();
+    const role = loadRolePrompt(ArbiterSolon.systemPromptPath);
     const planning = ctx.cache?.get('planning') ?? null;
     const facts = ctx.cache?.get('facts') ?? null;
     const reasoning = ctx.cache?.get('reasoning') ?? null;
@@ -26,7 +28,7 @@ export const ArbiterSolon: JudgeAgent = {
       rationale: string;
       confidence: number;
     }>(
-      'You are the final judge. Consider each stage output and its confidence. Produce a recommendation with rationale and confidence (0..1).',
+      `${role}\n\nYou are the final judge. Consider each stage output and its confidence. Produce a recommendation with rationale and confidence (0..1).`,
       JSON.stringify(inputSummary).slice(0, 6000),
       {
         type: 'object',
@@ -37,7 +39,7 @@ export const ArbiterSolon: JudgeAgent = {
         },
         required: ['recommendation', 'rationale', 'confidence'],
       },
-      { schemaName: 'judgment' }
+      { schemaName: 'judgment', maxOutputTokens: 1600 }
     );
 
     ctx.trace.addStep({

@@ -51,6 +51,8 @@ export interface TimelineItem {
   meta?: Record<string, unknown>;
 }
 
+import { log } from '../utils/logger.js';
+
 export class X23Client {
   private config: X23Config;
   constructor(config: X23Config = {}) {
@@ -59,16 +61,32 @@ export class X23Client {
 
   private async req<T>(path: string, init?: RequestInit): Promise<T> {
     const url = `${this.config.baseUrl}${path}`;
+    const start = Date.now();
     const headers: Record<string, string> = {
       'content-type': 'application/json',
     };
     if (this.config.apiKey) headers['x-api-key'] = this.config.apiKey;
-    const res = await fetch(url, { ...init, headers: { ...headers, ...(init?.headers as any) } });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`x23 ${path} ${res.status}: ${text}`);
+    const method = (init?.method || 'GET').toUpperCase();
+    let bodyPreview: string | undefined;
+    try {
+      const b = (init as any)?.body;
+      if (typeof b === 'string') bodyPreview = b;
+      else if (b) bodyPreview = JSON.stringify(b);
+    } catch {}
+    log.info(`x23 request → ${method} ${path}`, bodyPreview ? { body: bodyPreview } : undefined);
+    const spinner = log.spinner(`x23 ${method} ${path}`);
+    try {
+      const res = await fetch(url, { ...init, headers: { ...headers, ...(init?.headers as any) } });
+      const ms = Date.now() - start;
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`x23 ${path} ${res.status} (${ms}ms): ${text}`);
+      }
+      log.info(`x23 response ✓ ${method} ${path} (${ms}ms)`);
+      return (await res.json()) as T;
+    } finally {
+      spinner.stop();
     }
-    return (await res.json()) as T;
   }
 
   private toIso(unix?: number): string | undefined {

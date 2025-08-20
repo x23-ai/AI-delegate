@@ -2,25 +2,38 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import type { PlannerAgent } from './types.js';
 import type { PlanningOutput } from '../types.js';
+import { loadRolePrompt } from '../utils/roles.js';
+import type { LLMClient } from '../llm/index.js';
+import { createLLM } from '../llm/index.js';
 
 export const PlannerNavigator: PlannerAgent = {
   kind: 'planner',
   codename: 'Navigator Cartographer',
   systemPromptPath: resolve('src/agents/roles/planner.md'),
   async run(ctx): Promise<PlanningOutput> {
-    // Scaffold: design a minimal plan for the pipeline
-    const objectives = [
-      'Identify proposal scope, stakeholders, and decision surface',
-      'Collect official specs, forum discussions, and prior votes',
-      'Extract claims and data points to verify',
-      'Synthesize arguments with trade-offs and risks',
-    ];
-    const tasks = [
-      'Seed sources → hybrid search (official-first)',
-      'Build timeline of key events',
-      'Extract claim list for fact checking',
-      'Assemble pro/con reasoning draft',
-    ];
+    const llm: LLMClient = ctx.llm || createLLM();
+    const role = loadRolePrompt(PlannerNavigator.systemPromptPath);
+    const payloadDigest = (ctx.proposal.payload || [])
+      .slice(0, 8)
+      .map((p, i) => `P${i + 1}: [${p.type}] ${p.uri || ''}`)
+      .join('\n');
+    const plan = await llm.extractJSON<PlanningOutput>(
+      `${role}\n\nDesign a concise plan (objectives and ordered tasks) to evaluate this proposal effectively. Include assumptions and risks if relevant.`,
+      `Title: ${ctx.proposal.title}\nDescription: ${ctx.proposal.description}\nPayload:\n${payloadDigest || '(none)'}\n`,
+      {
+        type: 'object',
+        properties: {
+          objectives: { type: 'array', items: { type: 'string' } },
+          tasks: { type: 'array', items: { type: 'string' } },
+          assumptions: { type: 'array', items: { type: 'string' } },
+          risks: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['objectives', 'tasks'],
+      },
+      { schemaName: 'plannerPlan', maxOutputTokens: 2000 }
+    );
+    const objectives = plan.objectives || [];
+    const tasks = plan.tasks || [];
 
     const refs = (ctx.proposal.payload || [])
       .filter((p) => !!p.uri)
@@ -33,6 +46,6 @@ export const PlannerNavigator: PlannerAgent = {
       references: refs,
     });
 
-    return { objectives, tasks, assumptions: [], risks: [] };
+    return { objectives, tasks, assumptions: plan.assumptions || [], risks: plan.risks || [] };
   },
 };
