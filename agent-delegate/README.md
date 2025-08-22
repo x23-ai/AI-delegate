@@ -2,6 +2,15 @@
 
 This package orchestrates multi‑agent evaluation of governance proposals (planner → fact checker → reasoner → devil’s advocate → judge) with auditable traces and x23.ai data tools.
 
+## What’s New
+
+- Shared evidence toolkit across agents (FactChecker, Reasoner, Devil’s Advocate): LLM tool selection, query rewrite, rawPosts/official-detail expansion, caching + URI de‑dup, timeline enrichment.
+- Official‑docs first: LLM decides if a claim is policy/compliance oriented and should consult official docs first; falls back to other tools if no citations. Global override via `OFFICIAL_FIRST_ALL=1`.
+- Planner seed planning: planner generates a concise seed search (query + protocols), records it, and prepends a task if missing.
+- Reasoner iterative loop: repeats search→refine up to `REASONER_REFINE_ITERS` with an explicit continue/stop decision and per‑iteration rollups.
+- Prompt templating: role prompts accept `{{protocols}}` and `{{forumRoot}}` via `src/utils/prompt.ts`.
+- Config validation: early validation of required env and knob ranges with clear errors.
+
 ## Prompts and Tool Definitions
 
 - Agent prompts: editable constants live at the top of each agent file:
@@ -18,6 +27,7 @@ This package orchestrates multi‑agent evaluation of governance proposals (plan
   - `RAW_POSTS_DECISION_PROMPT` + `RAW_POSTS_DECISION_SCHEMA` – decide if raw discussion posts are needed for added context.
   - `QUERY_REWRITE_SYSTEM_PROMPT` + `QUERY_REWRITE_SCHEMA` – rewrite search queries concisely (enabled by default; set `FACT_ENABLE_QUERY_REWRITE=0` to disable).
   - `OFFICIAL_DETAIL_DECISION_PROMPT` + `OFFICIAL_DETAIL_DECISION_SCHEMA` – request official-docs detail after citations when the digest/snippet is insufficient.
+  - `OFFICIAL_FIRST_DECISION_PROMPT` + `OFFICIAL_FIRST_DECISION_SCHEMA` – decide if a claim is policy/compliance oriented and should try official docs first.
 
 - x23 client mapping: `src/tools/x23.ts`
   - Maps API responses to compact `DocChunk` objects using only relevant fields per `agent-delegate/x23ai API spec.yaml`:
@@ -31,6 +41,22 @@ This package orchestrates multi‑agent evaluation of governance proposals (plan
 - If a discussion citation needs more context, the agent can call `rawPosts` to fetch the thread’s raw content.
 - If an official-doc citation needs more detail than the digest, the agent can request an official-doc detail answer (internally calls `officialHybridAnswer` with `realtime=true`) and feed the response back into classification.
 - These detail steps are decided by the LLM and only run when needed (post-citation), keeping calls minimal and focused.
+
+## Shared Evidence Toolkit
+
+Provided by `src/tools/evidence.ts` and used by FactChecker, Reasoner, Devil’s Advocate:
+
+- Search selection (LLM) → run tool → optional expansions (rawPosts, official-detail).
+- Evidence cache (TTL `EVIDENCE_CACHE_TTL_MS`, default 600000) keyed by `(normalizedClaim,hints)`; de‑dups by `uri`.
+- Timeline enrichment for temporal/process claims via `x23.getTimeline` (mapped to pseudo‑docs).
+- “Official‑first” routing: LLM decides when to consult official docs first; if no citations returned, falls back to other tools.
+
+## Agent Behaviors
+
+- Planner: generates a seed query and protocols via `planSeedSearch`, records a trace step, and prepends a task `Seed search corpus: "..." [protocols]` when missing.
+- FactChecker: builds an initial corpus from seed search + payload docs, extracts assumptions and arithmetic checks, and classifies with citations/confidence.
+- Reasoner: starts argument with “Purpose Breakdown:”, iterates search→refine up to `REASONER_REFINE_ITERS` with a dedicated continue/stop decision; parallel evidence gathering per iteration. Adds trace rollups (evidenceCount, searchAttempts, uniqueCitations) and uses inline citation markers like `(R1)`.
+- Devil’s Advocate: runs bounded parallel evidence focusing on risks/constraints/conflicts, produces counterpoints/failure modes with inline markers and rollups.
 
 ## Environment Variables
 
@@ -54,6 +80,13 @@ Recommended/Configurable:
 - `SAVE_TRACE_JSON`: set to `1`/`true` to write the full reasoning trace to a JSON file after the run. Use `TRACE_JSON_PATH` to override the output path (default `dist/trace-proposal-<id>-<timestamp>.json`).
 - `FACT_MIN_CITATIONS`: Minimum citations required to consider a claim sufficiently evidenced (default `1`).
 - `FACT_MIN_CONFIDENCE`: Minimum confidence (0..1) from the fact-checker’s LLM classification to accept a claim without further refinement (default `0.6`).
+ - `REASONER_REFINE_ITERS`: Max search→refine iterations for the Reasoner (default `2`).
+ - `REASONER_PREMISE_EVIDENCE_MAX`: Max premises per iteration to collect evidence for (default `3`).
+ - `REASONER_EVIDENCE_CONCURRENCY`: Max concurrent evidence lookups per iteration (default `2`).
+ - `DEVILS_PREMISE_EVIDENCE_MAX`: Max premises Devil’s Advocate inspects (default `3`).
+ - `DEVILS_EVIDENCE_CONCURRENCY`: Concurrency for Devil’s Advocate evidence gathering (default `2`).
+ - `EVIDENCE_CACHE_TTL_MS`: TTL for evidence cache (default `600000`).
+ - `OFFICIAL_FIRST_ALL`: When `1`/true/yes, force official-docs first for all claims.
 
 On‑chain (not required initially):
 
@@ -72,6 +105,7 @@ On‑chain (not required initially):
 - Traces are recorded via `TraceBuilder` and can be published/hashed later.
 - LLM logging: token counts per call at info level with clear labels (operation + schema). With `DEBUG=1`, raw JSON/text and schemas are printed.
 - x23 logging: raw API JSON is printed when `DEBUG=1`. Each x23 tool method also logs the mapped return object at info level with a clear method label.
+ - Config validation: `src/utils/configValidate.ts` validates required env and knob ranges at startup and fails fast with clear messages.
 - Debug levels:
   - `DEBUG_LEVEL=0` (default): no extra debug payloads.
   - `DEBUG_LEVEL=1`: log raw JSON objects (LLM schemas, LLM responses, x23 responses) at debug level.

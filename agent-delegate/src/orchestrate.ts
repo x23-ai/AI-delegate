@@ -6,11 +6,14 @@ import { runConductor } from './agents/conductor.js';
 import { createLLM } from './llm/index.js';
 import type { AgentContext } from './agents/types.js';
 import { loadProposalParams, getCliArgs } from './utils/config.js';
+import { validateConfig } from './utils/configValidate.js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { log } from './utils/logger.js';
 
 async function main() {
+  // Validate configuration early for clearer errors
+  validateConfig();
   const proposal = loadProposalParams();
   const proposalId = proposal.id;
   const agentId = process.env.AGENT_ID || 'conductor-1';

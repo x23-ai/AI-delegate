@@ -10,6 +10,8 @@ import {
   OFFICIAL_DETAIL_DECISION_SCHEMA,
   QUERY_REWRITE_SYSTEM_PROMPT,
   QUERY_REWRITE_SCHEMA,
+  OFFICIAL_FIRST_DECISION_PROMPT,
+  OFFICIAL_FIRST_DECISION_SCHEMA,
 } from './definitions.js';
 import { AVAILABLE_ITEM_TYPES, AVAILABLE_PROTOCOLS, DISCUSSION_URL } from '../utils/x23Config.js';
 
@@ -90,7 +92,7 @@ export async function runSearchTool(
   ctx: AgentContext,
   plan: SearchToolPlan,
   fallbackQuery: string
-): Promise<{ docs: DocChunk[]; attempts: any[]; answer?: string }> {
+): Promise<{ docs: DocChunk[]; attempts: any[]; answer?: string; raws?: any[] }> {
   const topK = plan.limit ?? 6;
   const requestedProtocols = plan.protocols || [];
   const filteredProtocols = requestedProtocols.filter((p) => AVAILABLE_PROTOCOLS.includes(p));
@@ -107,9 +109,11 @@ export async function runSearchTool(
       similarityThreshold: th ?? plan.similarityThreshold,
     };
     if (!broaden && safeItemTypes) params.itemTypes = safeItemTypes;
-    const docs = await ctx.x23.hybridSearch(params);
+    const pairs = await (ctx.x23 as any).hybridSearchRaw(params);
+    const docs = pairs.map((p: any) => p.doc);
+    const raws = pairs.map((p: any) => p.raw);
     attempts.push({ tool: 'hybrid', query: q, similarityThreshold: params.similarityThreshold, itemTypes: params.itemTypes, resultCount: docs.length });
-    return docs;
+    return { docs, raws };
   }
   async function tryVector(th?: number, broaden?: boolean) {
     const params: any = {
@@ -119,42 +123,52 @@ export async function runSearchTool(
       similarityThreshold: th ?? plan.similarityThreshold,
     };
     if (!broaden && safeItemTypes) params.itemTypes = safeItemTypes;
-    const docs = await ctx.x23.vectorSearch(params);
+    const pairs = await (ctx.x23 as any).vectorSearchRaw(params);
+    const docs = pairs.map((p: any) => p.doc);
+    const raws = pairs.map((p: any) => p.raw);
     attempts.push({ tool: 'vector', query: q, similarityThreshold: params.similarityThreshold, itemTypes: params.itemTypes, resultCount: docs.length });
-    return docs;
+    return { docs, raws };
   }
   async function tryKeyword(broaden?: boolean) {
     const params: any = { query: q, topK, protocols };
     if (!broaden && safeItemTypes) params.itemTypes = safeItemTypes;
-    const docs = await ctx.x23.keywordSearch(params);
+    const pairs = await (ctx.x23 as any).keywordSearchRaw(params);
+    const docs = pairs.map((p: any) => p.doc);
+    const raws = pairs.map((p: any) => p.raw);
     attempts.push({ tool: 'keyword', query: q, itemTypes: params.itemTypes, resultCount: docs.length });
-    return docs;
+    return { docs, raws };
   }
   if (plan.tool === 'none') {
     return { docs: [], attempts };
   }
   if (plan.tool === 'hybrid') {
-    let docs = await tryHybrid();
+    let { docs, raws } = await tryHybrid();
     if (docs.length === 0) {
       const lowered = Math.max(0.15, (plan.similarityThreshold ?? 0.4) - 0.1);
-      docs = await tryHybrid(lowered, true);
+      ({ docs, raws } = await tryHybrid(lowered, true));
     }
     if (docs.length === 0) docs = await tryKeyword(true);
-    return { docs, attempts };
+    return { docs, attempts, raws };
   }
   if (plan.tool === 'vector') {
-    let docs = await tryVector();
+    let { docs, raws } = await tryVector();
     if (docs.length === 0) {
       const lowered = Math.max(0.15, (plan.similarityThreshold ?? 0.4) - 0.1);
-      docs = await tryVector(lowered, true);
+      ({ docs, raws } = await tryVector(lowered, true));
     }
-    if (docs.length === 0) docs = await tryHybrid((plan.similarityThreshold ?? 0.4) - 0.05, true);
-    return { docs, attempts };
+    if (docs.length === 0) {
+      const hybrid = await tryHybrid((plan.similarityThreshold ?? 0.4) - 0.05, true);
+      docs = hybrid.docs; raws = hybrid.raws;
+    }
+    return { docs, attempts, raws };
   }
   if (plan.tool === 'keyword') {
-    let docs = await tryKeyword();
-    if (docs.length === 0) docs = await tryHybrid(0.3, true);
-    return { docs, attempts };
+    let { docs, raws } = await tryKeyword();
+    if (docs.length === 0) {
+      const hybrid = await tryHybrid(0.3, true);
+      docs = hybrid.docs; raws = hybrid.raws;
+    }
+    return { docs, attempts, raws };
   }
   return { docs: [], attempts };
 }
@@ -227,23 +241,175 @@ export async function findEvidenceForClaim(
   llm: LLMClient,
   rolePrompt: string | undefined,
   claim: string,
-  hints?: string[]
+  hints?: string[],
+  opts?: { seenUris?: Set<string> }
 ): Promise<{ docs: DocChunk[]; attempts: any[] }> {
+  // Shared cache: ctx.cache -> evidenceCache (Map)
+  const cacheKeyRoot = 'evidenceCache';
+  const cacheMap = ((): Map<string, { ts: number; docs: DocChunk[]; attempts: any[] }> => {
+    if (!ctx.cache) return new Map();
+    const existing = ctx.cache.get(cacheKeyRoot) as Map<string, { ts: number; docs: DocChunk[]; attempts: any[] }> | undefined;
+    if (existing) return existing;
+    const m = new Map<string, { ts: number; docs: DocChunk[]; attempts: any[] }>();
+    ctx.cache.set(cacheKeyRoot, m);
+    return m;
+  })();
+  const normClaim = (claim || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const normHints = (hints || []).map((h) => (h || '').toLowerCase().trim()).filter(Boolean).sort();
+  const cacheKey = JSON.stringify({ c: normClaim, h: normHints });
+  const ttlMs = Number(process.env.EVIDENCE_CACHE_TTL_MS || 10 * 60 * 1000);
+  const now = Date.now();
+  const fromCache = cacheMap.get(cacheKey);
+  if (fromCache && now - fromCache.ts < ttlMs) {
+    const pruned = dedupByUri(fromCache.docs, opts?.seenUris);
+    return { docs: pruned, attempts: fromCache.attempts || [] };
+  }
   const payloadDigest = (ctx.proposal.payload || [])
     .slice(0, 8)
     .map((p, i) => `P${i + 1}: [${p.type}] ${p.uri || ''} :: ${JSON.stringify(p.data || p.metadata || {}).slice(0, 160)}`)
     .join('\n');
 
   const tried: any[] = [];
+  // Optional: prefer official-doc search first for policy/compliance claims or when globally enabled
+  const attempts: any[] = [];
+  const preferOfficialAll = String(process.env.OFFICIAL_FIRST_ALL || '').toLowerCase();
+  let preferOfficial =
+    preferOfficialAll === '1' || preferOfficialAll === 'true' || preferOfficialAll === 'yes';
+  if (!preferOfficial) {
+    try {
+      const dec = await llm.extractJSON<{ preferOfficialFirst: boolean }>(
+        sys(rolePrompt, OFFICIAL_FIRST_DECISION_PROMPT),
+        `Claim: ${claim}\nHints: ${JSON.stringify(hints || [])}\nTitle: ${ctx.proposal.title || ''}\nDescription: ${String(ctx.proposal.description || '').slice(0, 400)}`,
+        OFFICIAL_FIRST_DECISION_SCHEMA as any,
+        { schemaName: 'officialFirstDecision', maxOutputTokens: 1000 }
+      );
+      preferOfficial = !!dec?.preferOfficialFirst;
+    } catch {
+      // fallback heuristic if LLM decision fails
+      preferOfficial = isPolicyLikeClaim(claim) || (hints || []).some((h) => isPolicyHint(h));
+    }
+  }
+  if (preferOfficial) {
+    try {
+      const ans = await ctx.x23.officialHybridAnswer({
+        query: claim.slice(0, 256),
+        protocols: AVAILABLE_PROTOCOLS,
+        topK: 6,
+        similarityThreshold: 0.4,
+        realtime: true,
+      });
+      const docsOff = (ans.citations || []).slice(0, 6);
+      attempts.push({ tool: 'officialDoc', query: claim, resultCount: docsOff.length });
+      if (docsOff.length > 0) {
+        // Represent the detailed answer as an additional pseudo-doc, then citations
+        const detail: DocChunk = { id: 'official-detail', title: 'Official doc detail', snippet: ans.answer?.slice(0, 1000), source: 'officialDoc' };
+        let docs = [detail, ...docsOff];
+        // Timeline enrichment using raw citation if available
+        try {
+          const raw0 = (ans as any).citationsRaw?.[0];
+          if (raw0) {
+            const items = await ctx.x23.getTimeline(raw0, { scoreMatch: 0.2 });
+            const tlDocs: DocChunk[] = items.slice(0, 5).map((it, i) => ({
+              id: `tl-${i}-${it.id}`,
+              title: `Timeline: ${it.label}`,
+              uri: it.uri,
+              snippet: `${it.timestamp} ${(it.meta?.type ? `[${String(it.meta?.type)}] ` : '')}${it.label}`,
+              source: 'timeline',
+              score: 1,
+            }));
+            docs = tlDocs.concat(docs);
+          }
+        } catch {}
+        docs = dedupByUri(docs, opts?.seenUris);
+        cacheMap.set(cacheKey, { ts: now, docs, attempts });
+        return { docs, attempts };
+      }
+    } catch {
+      // ignore and fall back
+    }
+  }
+
   for (let iter = 0; iter < Math.max(1, Math.min(3, Number(process.env.REASONER_MAX_FACT_ITERS || '2'))); iter++) {
     const plan = await selectSearchTool(ctx, llm, { rolePrompt, claimOrQuery: claim, hints, payloadDigest, previouslyTried: tried });
     tried.push({ tool: plan.tool, query: plan.query });
     const exec = await runSearchTool(ctx, plan, claim);
     const rawDoc = await maybeExpandWithRawPosts(ctx, llm, rolePrompt, claim, exec.docs);
     const offDoc = await maybeExpandWithOfficialDetail(ctx, llm, rolePrompt, claim, exec.docs);
-    const docs = [rawDoc, offDoc].filter(Boolean).concat(exec.docs) as DocChunk[];
-    if (docs.length > 0) return { docs, attempts: exec.attempts };
+    let docs = [rawDoc, offDoc].filter(Boolean).concat(exec.docs) as DocChunk[];
+    // Timeline enrichment for temporal/process claims
+    if (/timeline|phase|epoch|deadline|date|snapshot|onchain|vote|voting|prop(ose|osal)/i.test(claim)) {
+      try {
+        const topDoc = exec.docs[0] || docs[0];
+        const topRaw = (exec as any).raws && (exec as any).raws[0];
+        if (topRaw || topDoc?.uri) {
+          const ogItem = topRaw || { sourceUrl: topDoc?.uri, title: topDoc?.title || '' };
+          const items = await ctx.x23.getTimeline(ogItem, { scoreMatch: 0.2 });
+          const tlDocs: DocChunk[] = items.slice(0, 5).map((it, i) => ({
+            id: `tl-${i}-${it.id}`,
+            title: `Timeline: ${it.label}`,
+            uri: it.uri,
+            snippet: `${it.timestamp} ${(it.meta?.type ? `[${String(it.meta?.type)}] ` : '')}${it.label}`,
+            source: 'timeline',
+            score: 1,
+          }));
+          docs = tlDocs.concat(docs);
+        }
+      } catch {}
+    }
+    docs = dedupByUri(docs, opts?.seenUris);
+    if (docs.length > 0) {
+      const atts = attempts.concat(exec.attempts || []);
+      cacheMap.set(cacheKey, { ts: now, docs, attempts: atts });
+      return { docs, attempts: atts };
+    }
   }
-  return { docs: [], attempts: tried };
+  const atts = attempts.concat(tried);
+  cacheMap.set(cacheKey, { ts: now, docs: [], attempts: atts });
+  return { docs: [], attempts: atts };
 }
 
+function dedupByUri(docs: DocChunk[], seen?: Set<string>): DocChunk[] {
+  const out: DocChunk[] = [];
+  const local = new Set<string>();
+  for (const d of docs) {
+    const u = (d.uri || '').trim();
+    if (!u) continue;
+    if (local.has(u)) continue;
+    if (seen && seen.has(u)) continue;
+    local.add(u);
+    if (seen) seen.add(u);
+    out.push(d);
+  }
+  return out;
+}
+
+export async function planSeedSearch(
+  ctx: AgentContext,
+  llm: LLMClient,
+  rolePrompt: string | undefined
+): Promise<{ query: string; protocols?: string[] }> {
+  const { SEED_SEARCH_SYSTEM_PROMPT, SEED_SEARCH_SCHEMA } = await import('./definitions.js');
+  const sys = (s: string) => (rolePrompt ? `${rolePrompt}\n\n${s}` : s);
+  const payload = (ctx.proposal.payload || [])
+    .slice(0, 6)
+    .map((p, i) =>
+      `P${i + 1} [${p.type}] ${p.uri || ''} :: ${JSON.stringify(p.data || p.metadata || {}).slice(0, 140)}`
+    )
+    .join('\n');
+  const seedPlan = await llm.extractJSON<{ query: string; protocols?: string[] }>(
+    sys(SEED_SEARCH_SYSTEM_PROMPT),
+    `Title: ${ctx.proposal.title}\nDescription: ${ctx.proposal.description}\nPayloadDigest:\n${payload || '(none)'}\n`,
+    SEED_SEARCH_SCHEMA as any,
+    { schemaName: 'seedSearchPlan', maxOutputTokens: 2000 }
+  );
+  return seedPlan;
+}
+
+function isPolicyHint(h: string): boolean {
+  const s = (h || '').toLowerCase();
+  return /policy|charter|manual|law|constitution|guideline|rules?|mandate|terms|framework/.test(s);
+}
+function isPolicyLikeClaim(c: string): boolean {
+  const s = (c || '').toLowerCase();
+  return /policy|charter|manual|law|constitution|guideline|rules?|mandate|terms|framework|compliance|official/.test(s);
+}

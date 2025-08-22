@@ -4,6 +4,9 @@ import { loadRolePrompt } from '../utils/roles.js';
 import type { LLMClient } from '../llm/index.js';
 import { createLLM } from '../llm/index.js';
 import { findEvidenceForClaim } from '../tools/evidence.js';
+import { applyPromptTemplate } from '../utils/prompt.js';
+import { AVAILABLE_PROTOCOLS, DISCUSSION_URL } from '../utils/x23Config.js';
+import { SchemaNames, TraceLabels } from './constants.js';
 
 // LLM prompts (editable)
 const REASONER_PROMPT_SYSTEM_SUFFIX =
@@ -11,7 +14,7 @@ const REASONER_PROMPT_SYSTEM_SUFFIX =
     'Form structured reasoning for the proposal, grounded in the vetted facts and planning objectives.',
     'Begin the argument with a short section exactly titled "Purpose Breakdown:" that lists stakeholder purposes as concise bullets for: proposers, voters, protocol stewards, and affected users. Reflect the proposal context, not generic platitudes.',
     'Question the overarching goal/purpose of the proposal and relate stakeholder purposes to that goal (alignments/tensions).',
-    'When evidence is provided, use it to inform premises and highlight gaps. Be explicit about uncertainties.',
+    'When evidence is provided, use it to inform premises and highlight gaps. Use inline citation markers like (R1), (R2) corresponding to numbered evidence under each premise in the provided evidenceDigest. Be explicit about uncertainties.',
     'Output JSON must include a numeric confidence in [0,1].',
   ].join('\n');
 
@@ -19,8 +22,9 @@ const REASONER_PROMPT_SYSTEM_SUFFIX =
 const REASONER_ITER_DECISION_SUFFIX =
   [
     'You decide whether to run another search+refine iteration.',
-    '- Continue if key premises remain weakly supported, uncertainties are material, contradictions exist, or additional policy/official guidance is likely to improve correctness.',
+    '- Continue if any of the following hold: (a) open uncertainties remain; (b) conflicting premises detected; (c) missing citations for critical premises; (d) official/policy guidance likely exists but not consulted.',
     '- Stop if returns are diminishing, evidence is sufficient for the decision context, or further search is unlikely to change conclusions.',
+    'Checklist: openUncertainties?, conflictingPremises?, missingCitations?, likelyOfficialGuidance?.',
     'Return JSON { continue: boolean, rationale: string } only.',
   ].join('\n');
 
@@ -30,7 +34,11 @@ export const CogitoSage: ReasonerAgent = {
   systemPromptPath: 'src/agents/roles/reasoner.md',
   async run(ctx): Promise<ReasoningOutput> {
     const llm: LLMClient = ctx.llm || createLLM();
-    const role = loadRolePrompt(CogitoSage.systemPromptPath);
+    const baseRole = loadRolePrompt(CogitoSage.systemPromptPath);
+    const role = applyPromptTemplate(baseRole, {
+      protocols: AVAILABLE_PROTOCOLS.join(', '),
+      forumRoot: DISCUSSION_URL,
+    });
     const facts: any = ctx.cache?.get('facts') || {};
     const planning: any = ctx.cache?.get('planning') || {};
     const input = {
@@ -42,9 +50,8 @@ export const CogitoSage: ReasonerAgent = {
       planning,
       facts,
     };
-    const schemaName = process.env.REASONER_SCHEMA_NAME || 'reasoningOut';
-    const traceLabel =
-      process.env.REASONER_TRACE_LABEL || 'Reasoner drafted preliminary argument with premises';
+    const schemaName = SchemaNames.reasoning();
+    const traceLabel = TraceLabels.reasoning();
     const out = await llm.extractJSON<ReasoningOutput>(
       `${role}\n\n${REASONER_PROMPT_SYSTEM_SUFFIX}`,
       JSON.stringify(input).slice(0, 6000),
@@ -79,29 +86,35 @@ export const CogitoSage: ReasonerAgent = {
     for (let iter = 0; iter < maxIters; iter++) {
       // Evidence lookup for top premises in this iteration
       const evidenceByPremise: Array<{ premise: string; docs: { title?: string; uri?: string; snippet?: string }[] }>= [];
+      const searchAttempts: any[] = [];
+      const seenUris = new Set<string>();
       const premises = current.premises || [];
-      for (let i = 0; i < Math.min(maxPremises, premises.length); i++) {
-        const premise = premises[i];
-        const ev = await findEvidenceForClaim(ctx, llm, role, premise, [
-          'policy',
-          'charter',
-          'manual',
-          'law',
-          'governance rules',
-          'prior decisions',
-        ]);
-        const docs = (ev.docs || [])
-          .slice(0, 5)
-          .map((d) => ({ title: d.title, uri: d.uri, snippet: d.snippet }));
-        evidenceByPremise.push({ premise, docs });
-        ctx.trace.addStep({
-          type: 'reasoning',
-          description: `Collected evidence for premise ${i + 1} (iter ${iter + 1})`,
-          input: { premise },
-          output: { docs: docs.map((d) => ({ title: d.title, uri: d.uri })) },
-          references: docs.slice(0, 5).map((d) => ({ source: 'search', uri: d.uri || '' })),
-        });
+      const targets = premises.slice(0, Math.min(maxPremises, premises.length));
+      const conc = Math.max(1, Number(process.env.REASONER_EVIDENCE_CONCURRENCY || '2'));
+      async function worker(startIdx: number) {
+        for (let i = startIdx; i < targets.length; i += conc) {
+          const premise = targets[i];
+          const ev = await findEvidenceForClaim(ctx, llm, role, premise, [
+            'policy',
+            'charter',
+            'manual',
+            'law',
+            'governance rules',
+            'prior decisions',
+          ], { seenUris });
+          if (Array.isArray((ev as any).attempts)) searchAttempts.push(...(ev as any).attempts);
+          const docs = (ev.docs || []).slice(0, 5).map((d) => ({ title: d.title, uri: d.uri, snippet: d.snippet }));
+          evidenceByPremise[i] = { premise, docs };
+          ctx.trace.addStep({
+            type: 'reasoning',
+            description: `Collected evidence for premise ${i + 1} (iter ${iter + 1})`,
+            input: { premise },
+            output: { docs: docs.map((d) => ({ title: d.title, uri: d.uri })) },
+            references: docs.slice(0, 5).map((d) => ({ source: 'search', uri: d.uri || '' })),
+          });
+        }
       }
+      await Promise.allSettled(Array.from({ length: Math.min(conc, targets.length) }, (_, k) => worker(k)));
 
       const evidenceDigest = evidenceByPremise
         .map((e, idx) => {
@@ -129,11 +142,13 @@ export const CogitoSage: ReasonerAgent = {
         { schemaName: 'reasoningOutRefined', maxOutputTokens: 4500 }
       );
 
+      const uniqueCitations = Array.from(new Set(evidenceByPremise.flatMap((e) => e.docs.map((d) => d.uri || '')).filter(Boolean)));
       ctx.trace.addStep({
         type: 'reasoning',
         description: `Refined reasoning with evidence context (iter ${iter + 1})`,
-        input: { evidenceCount: evidenceByPremise.reduce((n, e) => n + e.docs.length, 0) },
-        output: { confidence: refined.confidence ?? null },
+        input: { evidenceCount: evidenceByPremise.reduce((n, e) => n + e.docs.length, 0), searchAttempts: searchAttempts.length },
+        output: { confidence: refined.confidence ?? null, uniqueCitations: uniqueCitations.length },
+        references: uniqueCitations.slice(0, 8).map((u) => ({ source: 'search', uri: u })),
       });
 
       // Convergence/decision check

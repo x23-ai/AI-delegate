@@ -17,6 +17,8 @@ import {
   maybeExpandWithRawPosts,
   maybeExpandWithOfficialDetail,
 } from '../tools/evidence.js';
+import { applyPromptTemplate } from '../utils/prompt.js';
+import { DISCUSSION_URL } from '../utils/x23Config.js';
 
 // LLM prompts (editable)
 const ASSUMPTION_EXTRACT_SYSTEM_SUFFIX =
@@ -34,26 +36,15 @@ export const FactSleuth: FactCheckerAgent = {
   systemPromptPath: 'src/agents/roles/fact-checker.md',
   async run(ctx): Promise<FactCheckOutput> {
     const llm: LLMClient = ctx.llm || createLLM();
-    const role = loadRolePrompt(FactSleuth.systemPromptPath);
+    const baseRole = loadRolePrompt(FactSleuth.systemPromptPath);
+    const role = applyPromptTemplate(baseRole, {
+      protocols: AVAILABLE_PROTOCOLS.join(', '),
+      forumRoot: DISCUSSION_URL,
+    });
     const sys = (s: string) => `${role}\n\n${s}`;
     // Derive a concise seed query via LLM (keyword-style, search-optimized)
-    const seedPlan = await llm.extractJSON<{
-      query: string;
-      protocols?: string[];
-    }>(
-      sys(SEED_SEARCH_SYSTEM_PROMPT),
-      `Title: ${ctx.proposal.title}\nDescription: ${ctx.proposal.description}\nPayloadDigest:\n${
-        (ctx.proposal.payload || [])
-          .slice(0, 6)
-          .map(
-            (p, i) =>
-              `P${i + 1} [${p.type}] ${p.uri || ''} :: ${JSON.stringify(p.data || p.metadata || {}).slice(0, 140)}`
-          )
-          .join('\n') || '(none)'
-      }\n`,
-      SEED_SEARCH_SCHEMA as any,
-      { schemaName: 'seedSearchPlan', maxOutputTokens: 2000 }
-    );
+    const { planSeedSearch } = await import('../tools/evidence.js');
+    const seedPlan = await planSeedSearch(ctx, llm, role);
 
     const seedQuery =
       (seedPlan?.query && seedPlan.query.trim()) ||

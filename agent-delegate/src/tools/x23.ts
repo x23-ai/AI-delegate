@@ -32,6 +32,7 @@ export interface DocChunk {
 export interface AnswerSynthesis {
   answer: string;
   citations: DocChunk[];
+  citationsRaw?: any[]; // raw items as returned by API for spec-compliant follow-ups (e.g., timeline)
   freshnessNote?: string; // reflects real-time context
 }
 
@@ -140,8 +141,8 @@ export class X23Client {
     return data.result?.itemTypes ?? [];
   }
 
-  /** Keyword-only search across indexed sources. */
-  async keywordSearch(q: SearchQuery & { protocols?: string[]; itemTypes?: string[]; limit?: number; sortByRelevance?: boolean }): Promise<DocChunk[]> {
+  /** Keyword-only search across indexed sources. (raw + mapped) */
+  async keywordSearchRaw(q: SearchQuery & { protocols?: string[]; itemTypes?: string[]; limit?: number; sortByRelevance?: boolean }): Promise<{ raw: any; doc: DocChunk }[]> {
     type Resp = { status: string; result: { results: any[] } };
     const body = {
       query: q.query,
@@ -151,13 +152,19 @@ export class X23Client {
       limit: q.topK ?? q['limit'] ?? 20,
     };
     const data = await this.req<Resp>('/keywordSearch', { method: 'POST', body: JSON.stringify(body) });
-    const ret = (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
-    log.info(`x23 keywordSearch: ${ret.length} docs`);
-    return ret;
+    const results = data.result?.results ?? [];
+    const pairs = results.map((it) => ({ raw: it, doc: this.mapItemToDocChunk(it) }));
+    log.info(`x23 keywordSearch: ${pairs.length} docs`);
+    return pairs;
   }
 
-  /** Vector/RAG semantic search. */
-  async vectorSearch(q: SearchQuery & { protocols?: string[]; itemTypes?: string[]; similarityThreshold?: number; limit?: number }): Promise<DocChunk[]> {
+  async keywordSearch(q: SearchQuery & { protocols?: string[]; itemTypes?: string[]; limit?: number; sortByRelevance?: boolean }): Promise<DocChunk[]> {
+    const pairs = await this.keywordSearchRaw(q);
+    return pairs.map((p) => p.doc);
+  }
+
+  /** Vector/RAG semantic search. (raw + mapped) */
+  async vectorSearchRaw(q: SearchQuery & { protocols?: string[]; itemTypes?: string[]; similarityThreshold?: number; limit?: number }): Promise<{ raw: any; doc: DocChunk }[]> {
     type Resp = { status: string; result: { results: any[] } };
     const body = {
       query: q.query,
@@ -167,13 +174,19 @@ export class X23Client {
       limit: q.topK ?? q['limit'] ?? 5,
     };
     const data = await this.req<Resp>('/ragSearch', { method: 'POST', body: JSON.stringify(body) });
-    const ret = (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
-    log.info(`x23 vectorSearch: ${ret.length} docs`);
-    return ret;
+    const results = data.result?.results ?? [];
+    const pairs = results.map((it) => ({ raw: it, doc: this.mapItemToDocChunk(it) }));
+    log.info(`x23 vectorSearch: ${pairs.length} docs`);
+    return pairs;
   }
 
-  /** Hybrid (keyword + vector) search. */
-  async hybridSearch(q: SearchQuery & { protocols?: string[]; itemTypes?: string[]; similarityThreshold?: number; limit?: number }): Promise<DocChunk[]> {
+  async vectorSearch(q: SearchQuery & { protocols?: string[]; itemTypes?: string[]; similarityThreshold?: number; limit?: number }): Promise<DocChunk[]> {
+    const pairs = await this.vectorSearchRaw(q);
+    return pairs.map((p) => p.doc);
+  }
+
+  /** Hybrid (keyword + vector) search. (raw + mapped) */
+  async hybridSearchRaw(q: SearchQuery & { protocols?: string[]; itemTypes?: string[]; similarityThreshold?: number; limit?: number }): Promise<{ raw: any; doc: DocChunk }[]> {
     type Resp = { status: string; result: { results: any[] } };
     const body = {
       query: q.query,
@@ -183,9 +196,15 @@ export class X23Client {
       similarityThreshold: q['similarityThreshold'] ?? 0.4,
     };
     const data = await this.req<Resp>('/hybridSearch', { method: 'POST', body: JSON.stringify(body) });
-    const ret = (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
-    log.info(`x23 hybridSearch: ${ret.length} docs`);
-    return ret;
+    const results = data.result?.results ?? [];
+    const pairs = results.map((it) => ({ raw: it, doc: this.mapItemToDocChunk(it) }));
+    log.info(`x23 hybridSearch: ${pairs.length} docs`);
+    return pairs;
+  }
+
+  async hybridSearch(q: SearchQuery & { protocols?: string[]; itemTypes?: string[]; similarityThreshold?: number; limit?: number }): Promise<DocChunk[]> {
+    const pairs = await this.hybridSearchRaw(q);
+    return pairs.map((p) => p.doc);
   }
 
   /** Hybrid search limited to official docs and synthesize an answer with citations. */
@@ -199,9 +218,10 @@ export class X23Client {
       realtime: q['realtime'] ?? false,
     };
     const data = await this.req<Resp>('/officialDocSearch', { method: 'POST', body: JSON.stringify(body) });
-    const citations = (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
-    const ret = { answer: data.result?.answer ?? '', citations };
-    log.info(`x23 officialDoc detail: ${ret.citations.length} citations, answer=${ret.answer ? 'yes' : 'no'}`);
+    const results = data.result?.results ?? [];
+    const citations = results.map((it) => this.mapItemToDocChunk(it));
+    const ret: AnswerSynthesis = { answer: data.result?.answer ?? '', citations, citationsRaw: results };
+    log.info(`x23 officialDoc detail: ${citations.length} citations, answer=${ret.answer ? 'yes' : 'no'}`);
     return ret;
   }
 
@@ -280,14 +300,55 @@ export async function fetchUrlContent(url: string): Promise<{
   text?: string;
   meta?: Record<string, unknown>;
 }> {
-  // TODO: implement with a safe fetcher and readability extraction service
-  return { url };
+  const controller = new AbortController();
+  const to = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(url, { signal: controller.signal, headers: { 'user-agent': 'ai-delegate/1.0' } });
+    const ct = res.headers.get('content-type') || '';
+    if (!res.ok || !ct.includes('text/html')) return { url };
+    const html = await res.text();
+    const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].trim() : undefined;
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 4000);
+    return { url, title, text, meta: { contentType: ct } };
+  } catch {
+    return { url };
+  } finally {
+    clearTimeout(to);
+  }
 }
 
 /** Score source credibility based on domain, authorship, and cross-references. */
 export function scoreSourceCredibility(chunk: DocChunk): number {
-  // TODO: implement a heuristic (domain whitelist, recency, authorship)
-  return chunk.score ?? 0;
+  let score = 0;
+  const uri = chunk.uri || '';
+  const source = (chunk.source || '').toLowerCase();
+  // Source type weighting
+  if (source === 'officialdoc') score += 0.6;
+  else if (source === 'onchain') score += 0.45;
+  else if (source === 'snapshot') score += 0.35;
+  else if (source === 'discussion') score += 0.2;
+  else if (source === 'code' || source === 'pullrequest') score += 0.25;
+  // Domain heuristics
+  if (/gov\.optimism\.io|snapshot\.org|github\.com|docs\./i.test(uri)) score += 0.15;
+  // Recency boost
+  if (chunk.publishedAt) {
+    try {
+      const ageMs = Date.now() - new Date(chunk.publishedAt).getTime();
+      const oneYear = 365 * 24 * 60 * 60 * 1000;
+      if (ageMs < oneYear) score += 0.1;
+      else if (ageMs < 2 * oneYear) score += 0.05;
+    } catch {}
+  }
+  // Fallback to provided score hint
+  if (typeof chunk.score === 'number') score += 0.1 * Math.tanh(chunk.score / 10);
+  return Math.max(0, Math.min(1, score));
 }
 
 /** Extract claims and entities from text to aid fact checking. */
