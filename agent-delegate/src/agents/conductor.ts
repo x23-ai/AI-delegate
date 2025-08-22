@@ -9,6 +9,20 @@ import { RedTeamRaven } from './devilsAdvocate.js';
 import { ArbiterSolon } from './judge.js';
 import { log } from '../utils/logger.js';
 
+// LLM prompts (editable)
+const CONDUCTOR_SCORE_PROMPT = (stage: string) =>
+  `You rate the ${stage} stage quality on a 0..1 scale. Consider completeness, clarity, and adequacy for downstream judgment. Return JSON { confidence:number, notes?:string }`;
+const CONDUCTOR_PLANNING_QA_PROMPT =
+  'You are planning QA. Evaluate if objectives and tasks are sufficient to assess a governance proposal. Return JSON { satisfied: boolean, missing: string[] }';
+const CONDUCTOR_FACT_QA_PROMPT =
+  'You validate fact-check sets for coverage and citations. Return JSON { satisfied: boolean, missingCitations: number } where satisfied means there is sufficient evidence to proceed.';
+const CONDUCTOR_REASONING_QA_PROMPT =
+  'You are a reasoning QA. Assess coherence and identify gaps. Return JSON { coherent: boolean, gaps: string[] }';
+const CONDUCTOR_CHALLENGE_QA_PROMPT =
+  'You are a red-team QA. Ensure counterpoints/failure modes are substantive. Return JSON { robust: boolean, missingRisks: number }.';
+const CONDUCTOR_JUDGE_QA_PROMPT =
+  'You evaluate if a recommendation is justified. Return JSON { accept: boolean, confidence: number } with confidence 0..1.';
+
 /**
  * Conductor orchestrates the multi-agent workflow. It does not hold policy
  * itself; instead it sequences specialist agents and records steps into the
@@ -27,7 +41,7 @@ export async function runConductor(
   async function scoreStage(stage: string, content: unknown): Promise<number | undefined> {
     if (!llm) return undefined;
     const res = await llm.extractJSON<{ confidence: number; notes?: string }>(
-      `You rate the ${stage} stage quality on a 0..1 scale. Consider completeness, clarity, and adequacy for downstream judgment. Return JSON { confidence:number, notes?:string }`,
+      CONDUCTOR_SCORE_PROMPT(stage),
       JSON.stringify(content).slice(0, 6000),
       {
         type: 'object',
@@ -53,13 +67,17 @@ export async function runConductor(
   try {
     const flow = (planning.tasks || []).join(' → ');
     const obj = (planning.objectives || []).map((o) => `- ${o}`).join('\n');
-    log.info('Plan overview:\n' + (obj ? `Objectives:\n${obj}\n` : '') + (flow ? `Tasks flow: ${flow}` : ''));
+    log.info(
+      'Plan overview:\n' +
+        (obj ? `Objectives:\n${obj}\n` : '') +
+        (flow ? `Tasks flow: ${flow}` : '')
+    );
   } catch {}
   for (let i = 0; i < maxIters; i++) {
     if (!llm) break;
     log.info(`Conductor: planning QA iteration ${i + 1}`);
     const evalPlan = await llm.extractJSON<{ satisfied: boolean; missing: string[] }>(
-      sys('You are planning QA. Evaluate if objectives and tasks are sufficient to assess a governance proposal. Return JSON { satisfied: boolean, missing: string[] }'),
+      sys(CONDUCTOR_PLANNING_QA_PROMPT),
       `Objectives: ${JSON.stringify(planning.objectives)}\nTasks: ${JSON.stringify(planning.tasks)}`,
       {
         type: 'object',
@@ -93,7 +111,7 @@ export async function runConductor(
     if (!llm) break;
     log.info(`Conductor: fact QA iteration ${i + 1}`);
     const evalFacts = await llm.extractJSON<{ satisfied: boolean; missingCitations: number }>(
-      sys('You validate fact-check sets for coverage and citations. Return JSON { satisfied: boolean, missingCitations: number } where satisfied means there is sufficient evidence to proceed.'),
+      sys(CONDUCTOR_FACT_QA_PROMPT),
       `Claims: ${JSON.stringify(facts.claims)}\nEvidence: ${JSON.stringify(facts.keyEvidence)}`,
       {
         type: 'object',
@@ -127,7 +145,7 @@ export async function runConductor(
     if (!llm) break;
     log.info(`Conductor: reasoning QA iteration ${i + 1}`);
     const evalReason = await llm.extractJSON<{ coherent: boolean; gaps: string[] }>(
-      sys('You are a reasoning QA. Assess coherence and identify gaps. Return JSON { coherent: boolean, gaps: string[] }'),
+      sys(CONDUCTOR_REASONING_QA_PROMPT),
       `Premises: ${JSON.stringify(reasoning.premises)}\nArgument: ${reasoning.argument}`,
       {
         type: 'object',
@@ -160,7 +178,7 @@ export async function runConductor(
     if (!llm) break;
     log.info(`Conductor: challenge QA iteration ${i + 1}`);
     const evalChallenge = await llm.extractJSON<{ robust: boolean; missingRisks: number }>(
-      sys('You are a red-team QA. Ensure counterpoints/failure modes are substantive. Return JSON { robust: boolean, missingRisks: number }.'),
+      sys(CONDUCTOR_CHALLENGE_QA_PROMPT),
       `Counterpoints: ${JSON.stringify(challenge.counterpoints)}\nFailureModes: ${JSON.stringify(challenge.failureModes)}`,
       {
         type: 'object',
@@ -193,7 +211,7 @@ export async function runConductor(
     if (!llm) break;
     log.info(`Conductor: adjudication QA iteration ${i + 1}`);
     const evalJudge = await llm.extractJSON<{ accept: boolean; confidence: number }>(
-      sys('You evaluate if a recommendation is justified. Return JSON { accept: boolean, confidence: number } with confidence 0..1.'),
+      sys(CONDUCTOR_JUDGE_QA_PROMPT),
       `Recommendation: ${adjudication.recommendation}\nRationale: ${adjudication.rationale}`,
       {
         type: 'object',

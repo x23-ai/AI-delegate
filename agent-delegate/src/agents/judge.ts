@@ -4,6 +4,10 @@ import type { LLMClient } from '../llm/index.js';
 import { createLLM } from '../llm/index.js';
 import { loadRolePrompt } from '../utils/roles.js';
 
+// LLM prompts (editable)
+const JUDGE_PROMPT_SYSTEM_SUFFIX =
+  'You are the final judge. Consider each stage output and its confidence. Produce a recommendation with rationale and confidence (0..1).';
+
 export const ArbiterSolon: JudgeAgent = {
   kind: 'judge',
   codename: 'Arbiter Solon',
@@ -28,7 +32,7 @@ export const ArbiterSolon: JudgeAgent = {
       rationale: string;
       confidence: number;
     }>(
-      `${role}\n\nYou are the final judge. Consider each stage output and its confidence. Produce a recommendation with rationale and confidence (0..1).`,
+      `${role}\n\n${JUDGE_PROMPT_SYSTEM_SUFFIX}`,
       JSON.stringify(inputSummary).slice(0, 6000),
       {
         type: 'object',

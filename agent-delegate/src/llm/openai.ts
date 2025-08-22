@@ -1,5 +1,5 @@
 import type { LLMClient, LLMGenerateOptions, LLMExtractOptions } from './types.js';
-import { log, sleep } from '../utils/logger.js';
+import { log, sleep, colors } from '../utils/logger.js';
 
 interface OpenAIConfig {
   apiKey?: string;
@@ -11,11 +11,17 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
   const apiKey = config.apiKey || process.env.OPENAI_API_KEY;
   const model = config.model || process.env.OPENAI_MODEL || 'gpt-5-mini';
   const baseUrl = config.baseUrl || 'https://api.openai.com/v1';
+  const DEBUG = (() => {
+    const v = String(process.env.DEBUG || '').toLowerCase();
+    return v === '1' || v === 'true' || v === 'yes';
+  })();
 
   const isReasoningModel = /(^gpt5|^gpt-5)/i.test(model) || /gpt-5-mini/i.test(model);
 
   async function callResponses(body: any): Promise<any> {
     if (!apiKey) throw new Error('OPENAI_API_KEY is required for OpenAI provider');
+    const spinner = log.spinner(`LLM ${model} responses`);
+    const start = Date.now();
     const res = await fetch(`${baseUrl}/responses`, {
       method: 'POST',
       headers: {
@@ -24,11 +30,48 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
       },
       body: JSON.stringify({ model, ...body }),
     });
+    const ms = Date.now() - start;
     if (!res.ok) {
       const text = await res.text().catch(() => '');
+      spinner.stop(`${colors.red('✗')} LLM responses error ${colors.dim(`(${ms}ms)`)}`);
+      log.error(`${colors.cyan('LLM response')} ${colors.red('✗')} ${colors.dim(`(${ms}ms)`)} ${colors.red(String(res.status))}`);
       throw new Error(`OpenAI Responses error ${res.status}: ${text}`);
     }
+    spinner.stop(`${colors.green('✓')} LLM responses completed ${colors.dim(`(${ms}ms)`)}`);
+    log.info(`${colors.cyan('LLM response')} ${colors.green('✓')} ${colors.dim(`(${ms}ms)`)}`);
     return await res.json();
+  }
+
+  function approxTokensFromText(s: string): number {
+    if (!s) return 0;
+    // Rough heuristic: ~4 chars per token
+    return Math.max(1, Math.round(s.length / 4));
+  }
+
+  function logTokenUsage(label: string, json: any, inputStrs: string[], extraSchema?: object) {
+    try {
+      const u = (json as any)?.usage || (json as any)?.response?.usage || undefined;
+      let inputTokens = u?.input_tokens ?? u?.prompt_tokens ?? u?.input?.tokens;
+      let outputTokens = u?.output_tokens ?? u?.completion_tokens ?? u?.output?.tokens;
+      let totalTokens = u?.total_tokens ?? (typeof inputTokens === 'number' && typeof outputTokens === 'number' ? inputTokens + outputTokens : undefined);
+      let est = false;
+      if (typeof inputTokens !== 'number') {
+        const inputsJoined = inputStrs.filter(Boolean).join('\n');
+        let approx = approxTokensFromText(inputsJoined);
+        if (extraSchema) {
+          try { approx += approxTokensFromText(JSON.stringify(extraSchema)); } catch {}
+        }
+        inputTokens = approx;
+        est = true;
+      }
+      if (typeof outputTokens !== 'number') {
+        // If model didn't return usage, we cannot know completion size here reliably
+        outputTokens = 0;
+        est = true;
+      }
+      if (typeof totalTokens !== 'number') totalTokens = (inputTokens || 0) + (outputTokens || 0);
+      log.info(`LLM tokens ${model} ${label}: input=${inputTokens} output=${outputTokens} total=${totalTokens}${est ? ' (est)' : ''}`);
+    } catch {}
   }
 
   function pickOutputText(json: any): string {
@@ -62,6 +105,13 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
         log.info(`LLM generateText attempt ${attempt} (max_tokens=${maxTokens}) …`);
         try {
           const json = await callResponses(body);
+          logTokenUsage('generateText', json, [system, prompt]);
+          if (DEBUG) {
+            try {
+              console.log('[DEBUG] LLM raw JSON (generateText):');
+              console.log(JSON.stringify(json, null, 2));
+            } catch {}
+          }
           const out = pickOutputText(json);
           return out;
         } catch (err) {
@@ -106,9 +156,8 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
 
       const strictSchema = enforceNoAdditionalProps(jsonSchema);
       const schemaName = opts?.schemaName || 'extraction';
-      const DEBUG = String(process.env.LLM_DEBUG_SCHEMA || '').toLowerCase() === '1';
       if (DEBUG) {
-        console.log(`[LLM DEBUG] Using schema '${schemaName}':`);
+        console.log(`[DEBUG] LLM schema '${schemaName}':`);
         try { console.log(JSON.stringify(strictSchema, null, 2)); } catch {}
       }
       const baseMax = opts?.maxOutputTokens ?? 4000;
@@ -134,9 +183,16 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
         log.info(`LLM extractJSON '${schemaName}' attempt ${attempt} (max_tokens=${maxTokens}) …`);
         try {
           const json = await callResponses(body);
+          logTokenUsage(`extractJSON:${schemaName}`, json, [system, prompt], strictSchema);
+          if (DEBUG) {
+            try {
+              console.log('[DEBUG] LLM raw JSON (extractJSON):');
+              console.log(JSON.stringify(json, null, 2));
+            } catch {}
+          }
           const text = pickOutputText(json);
           if (DEBUG) {
-            console.log('[LLM DEBUG] Raw response text:');
+            console.log('[DEBUG] LLM raw text:');
             console.log(text);
           }
           const raw = JSON.parse(text);
@@ -213,8 +269,14 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
           return validateAndPrune(strictSchema, raw);
           })();
           if (errors.length) {
-            if (DEBUG) console.error('[LLM DEBUG] Validation errors:', errors);
+            if (DEBUG) console.error('[DEBUG] LLM validation errors:', errors);
             throw new Error(`LLM JSON failed schema validation: ${errors.join('; ')}`);
+          }
+          if (DEBUG) {
+            try {
+              console.log(`[DEBUG] LLM parsed object (${schemaName}):`);
+              console.log(JSON.stringify(value, null, 2));
+            } catch {}
           }
           return value as T;
         } catch (e) {
@@ -293,8 +355,14 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
           }
             const { value, errors } = validateAndPrune(strictSchema, j.output);
             if (errors.length) {
-              if (DEBUG) console.error('[LLM DEBUG] Validation errors:', errors);
+              if (DEBUG) console.error('[DEBUG] LLM validation errors:', errors);
               throw new Error(`LLM JSON failed schema validation: ${errors.join('; ')}`);
+            }
+            if (DEBUG) {
+              try {
+                console.log(`[DEBUG] LLM parsed object (${schemaName}) from provider output:`);
+                console.log(JSON.stringify(value, null, 2));
+              } catch {}
             }
             return value as T;
           }

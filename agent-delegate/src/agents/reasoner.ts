@@ -4,6 +4,10 @@ import { loadRolePrompt } from '../utils/roles.js';
 import type { LLMClient } from '../llm/index.js';
 import { createLLM } from '../llm/index.js';
 
+// LLM prompts (editable)
+const REASONER_PROMPT_SYSTEM_SUFFIX =
+  'Form structured reasoning for the proposal, grounded in the vetted facts and planning objectives. Be explicit about uncertainties.';
+
 export const CogitoSage: ReasonerAgent = {
   kind: 'reasoner',
   codename: 'Cogito Sage',
@@ -19,7 +23,7 @@ export const CogitoSage: ReasonerAgent = {
       facts,
     };
     const out = await llm.extractJSON<ReasoningOutput>(
-      `${role}\n\nForm structured reasoning for the proposal, grounded in the vetted facts and planning objectives. Be explicit about uncertainties.`,
+      `${role}\n\n${REASONER_PROMPT_SYSTEM_SUFFIX}`,
       JSON.stringify(input).slice(0, 6000),
       {
         type: 'object',

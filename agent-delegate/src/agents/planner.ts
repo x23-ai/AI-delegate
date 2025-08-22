@@ -6,6 +6,10 @@ import { loadRolePrompt } from '../utils/roles.js';
 import type { LLMClient } from '../llm/index.js';
 import { createLLM } from '../llm/index.js';
 
+// LLM prompts (editable)
+const PLANNER_PROMPT_SYSTEM_SUFFIX =
+  'Design a concise plan (objectives and ordered tasks) to evaluate this proposal effectively. Include assumptions and risks if relevant.';
+
 export const PlannerNavigator: PlannerAgent = {
   kind: 'planner',
   codename: 'Navigator Cartographer',
@@ -18,7 +22,7 @@ export const PlannerNavigator: PlannerAgent = {
       .map((p, i) => `P${i + 1}: [${p.type}] ${p.uri || ''}`)
       .join('\n');
     const plan = await llm.extractJSON<PlanningOutput>(
-      `${role}\n\nDesign a concise plan (objectives and ordered tasks) to evaluate this proposal effectively. Include assumptions and risks if relevant.`,
+      `${role}\n\n${PLANNER_PROMPT_SYSTEM_SUFFIX}`,
       `Title: ${ctx.proposal.title}\nDescription: ${ctx.proposal.description}\nPayload:\n${payloadDigest || '(none)'}\n`,
       {
         type: 'object',

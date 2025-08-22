@@ -4,6 +4,10 @@ import { loadRolePrompt } from '../utils/roles.js';
 import type { LLMClient } from '../llm/index.js';
 import { createLLM } from '../llm/index.js';
 
+// LLM prompts (editable)
+const DEVILS_ADVOCATE_PROMPT_SYSTEM_SUFFIX =
+  "Stress-test the current reasoning and surface substantive counterpoints and failure modes.";
+
 export const RedTeamRaven: DevilsAdvocateAgent = {
   kind: 'devilsAdvocate',
   codename: "Red Team Raven",
@@ -15,7 +19,7 @@ export const RedTeamRaven: DevilsAdvocateAgent = {
     const facts: any = ctx.cache?.get('facts') || {};
     const input = { reasoning, facts };
     const out = await llm.extractJSON<ChallengeOutput>(
-      `${role}\n\nStress-test the current reasoning and surface substantive counterpoints and failure modes.`,
+      `${role}\n\n${DEVILS_ADVOCATE_PROMPT_SYSTEM_SUFFIX}`,
       JSON.stringify(input).slice(0, 6000),
       {
         type: 'object',

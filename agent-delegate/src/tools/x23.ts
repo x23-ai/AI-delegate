@@ -51,7 +51,12 @@ export interface TimelineItem {
   meta?: Record<string, unknown>;
 }
 
-import { log } from '../utils/logger.js';
+import { log, colors } from '../utils/logger.js';
+
+const DEBUG = (() => {
+  const v = String(process.env.DEBUG || '').toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes';
+})();
 
 export class X23Client {
   private config: X23Config;
@@ -73,19 +78,30 @@ export class X23Client {
       if (typeof b === 'string') bodyPreview = b;
       else if (b) bodyPreview = JSON.stringify(b);
     } catch {}
-    log.info(`x23 request → ${method} ${path}`, bodyPreview ? { body: bodyPreview } : undefined);
+    log.info(`${colors.cyan('x23 request')} → ${method} ${path}`, bodyPreview ? { body: bodyPreview } : undefined);
     const spinner = log.spinner(`x23 ${method} ${path}`);
     try {
       const res = await fetch(url, { ...init, headers: { ...headers, ...(init?.headers as any) } });
       const ms = Date.now() - start;
       if (!res.ok) {
         const text = await res.text().catch(() => '');
+        spinner.stop(`${colors.red('✗')} x23 ${method} ${path} ${colors.dim(`(${ms}ms)`)}`);
+        log.error(`${colors.cyan('x23 response')} ${colors.red('✗')} ${method} ${path} ${colors.dim(`(${ms}ms)`)} ${colors.red(String(res.status))}`);
         throw new Error(`x23 ${path} ${res.status} (${ms}ms): ${text}`);
       }
-      log.info(`x23 response ✓ ${method} ${path} (${ms}ms)`);
-      return (await res.json()) as T;
+      spinner.stop(`${colors.green('✓')} x23 ${method} ${path} ${colors.dim(`(${ms}ms)`)}`);
+      log.info(`${colors.cyan('x23 response')} ${colors.green('✓')} ${method} ${path} ${colors.dim(`(${ms}ms)`)}`);
+      const json = (await res.json()) as T;
+      if (DEBUG) {
+        try {
+          console.log(`[DEBUG] x23 raw JSON ${method} ${path}:`);
+          console.log(JSON.stringify(json, null, 2));
+        } catch {}
+      }
+      return json;
     } finally {
-      spinner.stop();
+      // Ensure spinner is stopped if not already (no message)
+      try { spinner.stop(); } catch {}
     }
   }
 
@@ -127,7 +143,9 @@ export class X23Client {
       limit: q.topK ?? q['limit'] ?? 20,
     };
     const data = await this.req<Resp>('/keywordSearch', { method: 'POST', body: JSON.stringify(body) });
-    return (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
+    const ret = (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
+    try { log.info('x23 return keywordSearch', ret); } catch {}
+    return ret;
   }
 
   /** Vector/RAG semantic search. */
@@ -141,7 +159,9 @@ export class X23Client {
       limit: q.topK ?? q['limit'] ?? 5,
     };
     const data = await this.req<Resp>('/ragSearch', { method: 'POST', body: JSON.stringify(body) });
-    return (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
+    const ret = (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
+    try { log.info('x23 return vectorSearch', ret); } catch {}
+    return ret;
   }
 
   /** Hybrid (keyword + vector) search. */
@@ -155,7 +175,9 @@ export class X23Client {
       similarityThreshold: q['similarityThreshold'] ?? 0.4,
     };
     const data = await this.req<Resp>('/hybridSearch', { method: 'POST', body: JSON.stringify(body) });
-    return (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
+    const ret = (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
+    try { log.info('x23 return hybridSearch', ret); } catch {}
+    return ret;
   }
 
   /** Hybrid search limited to official docs and synthesize an answer with citations. */
@@ -170,7 +192,9 @@ export class X23Client {
     };
     const data = await this.req<Resp>('/officialDocSearch', { method: 'POST', body: JSON.stringify(body) });
     const citations = (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
-    return { answer: data.result?.answer ?? '', citations };
+    const ret = { answer: data.result?.answer ?? '', citations };
+    try { log.info('x23 return officialHybridAnswer', ret); } catch {}
+    return ret;
   }
 
   /** Retrieve raw discussion posts from a specific thread URI or id. */
@@ -206,13 +230,15 @@ export class X23Client {
     const body = { discussionUrl, topicId, minimumUnix };
     const data = await this.req<Resp>('/rawPosts', { method: 'POST', body: JSON.stringify(body) });
     const raw = data.result?.rawPosts ?? '';
-    return [
+    const ret = [
       {
         id: `${topicId}:raw`,
         body: raw,
         uri: discussionUrl,
       },
     ];
+    try { log.info('x23 return getDiscussionPosts', ret); } catch {}
+    return ret;
   }
 
   /** Retrieve chronological timeline items related to an entity or URI. */
@@ -225,13 +251,15 @@ export class X23Client {
     };
     const data = await this.req<Resp>('/timeline', { method: 'POST', body: JSON.stringify(body) });
     const items = data.result?.timeline ?? [];
-    return items.map((it) => ({
+    const ret = items.map((it) => ({
       id: String(it.id),
       label: it.title || it.headline || String(it.id),
       timestamp: this.toIso(it.updated ?? it.created) || new Date().toISOString(),
       uri: it.appUrl || it.sourceUrl,
       meta: { protocol: it.protocol, type: it.type },
     }));
+    try { log.info('x23 return getTimeline', ret); } catch {}
+    return ret;
   }
 }
 

@@ -13,7 +13,7 @@ Recommended/Configurable:
 
 - `LLM_PROVIDER`: `openai` (default) or `stub`.
 - `OPENAI_MODEL`: OpenAI Responses model. Default: `gpt-5-mini` (reasoning; temperature ignored). Examples: `gpt-5-mini`, `gpt-4o-mini`.
-- `LLM_DEBUG_SCHEMA`: set to `1` to log the strict JSON schema used for extraction and the raw model response text, plus validation errors if any.
+- `DEBUG`: set to `1` (or `true`) to log raw LLM responses (schema, JSON, and text) and raw x23 API JSON responses for easier debugging.
 - `X23_PROTOCOLS`: Comma-separated list of default protocols to search. Default: `optimism`.
 - `X23_DISCUSSION_URL`: Default forum base URL for rawPosts. Default: `https://gov.optimism.io`.
 - `ORCH_MAX_ITERS`: Max refinement iterations per stage (default `2`).
