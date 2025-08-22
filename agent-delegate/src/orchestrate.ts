@@ -6,8 +6,8 @@ import { runConductor } from './agents/conductor.js';
 import { createLLM } from './llm/index.js';
 import type { AgentContext } from './agents/types.js';
 import { loadProposalParams, getCliArgs } from './utils/config.js';
-import { writeFileSync } from 'fs';
-import { resolve } from 'path';
+import { writeFileSync, mkdirSync } from 'fs';
+import { resolve, dirname } from 'path';
 import { log } from './utils/logger.js';
 
 async function main() {
@@ -27,7 +27,9 @@ async function main() {
     llm,
   };
 
-  log.info(`Orchestrator: starting run for proposal ${proposalId} (${proposal.title || 'untitled'})`);
+  log.info(
+    `Orchestrator: starting run for proposal ${proposalId} (${proposal.title || 'untitled'})`
+  );
   const result = await runConductor(ctx, llm);
   log.info('Orchestrator: run complete');
   console.log('Conductor pipeline result:', JSON.stringify(result, null, 2));
@@ -69,6 +71,24 @@ async function main() {
     const p = resolve(summaryPath);
     writeFileSync(p, JSON.stringify(summaryObj, null, 2));
     console.log(`Summary written to ${p}`);
+  }
+
+  // Optional: save full reasoning trace to JSON when env enabled
+  const saveTraceFlag = String(process.env.SAVE_TRACE_JSON || '').toLowerCase();
+  const shouldSaveTrace =
+    saveTraceFlag === '1' || saveTraceFlag === 'true' || saveTraceFlag === 'yes';
+  if (shouldSaveTrace) {
+    const defaultName = `results/trace-proposal-${proposalId}-${new Date()
+      .toISOString()
+      .replace(/[:.]/g, '-')}.json`;
+    const outPath = resolve(process.env.TRACE_JSON_PATH || defaultName);
+    try {
+      mkdirSync(dirname(outPath), { recursive: true });
+      writeFileSync(outPath, JSON.stringify(trace.getTrace(), null, 2));
+      log.info(`Reasoning trace saved to ${outPath}`);
+    } catch (e) {
+      log.error('Failed to save reasoning trace JSON', e);
+    }
   }
 }
 

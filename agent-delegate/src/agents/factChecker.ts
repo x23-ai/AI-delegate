@@ -5,20 +5,18 @@ import { createLLM } from '../llm/index.js';
 import type { DocChunk } from '../tools/x23.js';
 import { evaluateExpression, nearlyEqual } from '../utils/math.js';
 import { log, colors } from '../utils/logger.js';
-import { AVAILABLE_PROTOCOLS, AVAILABLE_ITEM_TYPES, DISCUSSION_URL } from '../utils/x23Config.js';
+import { AVAILABLE_PROTOCOLS, AVAILABLE_ITEM_TYPES } from '../utils/x23Config.js';
 import { loadRolePrompt } from '../utils/roles.js';
 import {
-  SEARCH_TOOL_SELECTOR_SYSTEM_PROMPT,
-  SEARCH_TOOL_SELECTOR_SCHEMA,
   SEED_SEARCH_SYSTEM_PROMPT,
   SEED_SEARCH_SCHEMA,
-  RAW_POSTS_DECISION_PROMPT,
-  RAW_POSTS_DECISION_SCHEMA,
-  QUERY_REWRITE_SYSTEM_PROMPT,
-  QUERY_REWRITE_SCHEMA,
-  OFFICIAL_DETAIL_DECISION_PROMPT,
-  OFFICIAL_DETAIL_DECISION_SCHEMA,
 } from '../tools/definitions.js';
+import {
+  selectSearchTool,
+  runSearchTool,
+  maybeExpandWithRawPosts,
+  maybeExpandWithOfficialDetail,
+} from '../tools/evidence.js';
 
 // LLM prompts (editable)
 const ASSUMPTION_EXTRACT_SYSTEM_SUFFIX =
@@ -165,223 +163,7 @@ export const FactSleuth: FactCheckerAgent = {
         .map((d) => ({ source: d.source || 'search', uri: d.uri || '' })),
     });
 
-    // Helper: LLM tool selection
-    async function pickSearchTool(claim: string, hints?: string[]) {
-      return llm.extractJSON<{
-        tool: 'hybrid' | 'vector' | 'keyword' | 'none';
-        query?: string;
-        limit?: number;
-        similarityThreshold?: number;
-        protocols?: string[];
-        itemTypes?: string[];
-      }>(
-        sys(SEARCH_TOOL_SELECTOR_SYSTEM_PROMPT),
-        `Claim: ${claim}\nHints: ${JSON.stringify(hints || [])}\nSeedTitle: ${ctx.proposal.title}\nProvidedPayload:\n${payloadDigest || '(none)'}`,
-        SEARCH_TOOL_SELECTOR_SCHEMA as any,
-        { schemaName: 'searchToolPlan', maxOutputTokens: 2500 }
-      );
-    }
-
-    // Helper: Sanitize tool plan values to meet API constraints
-    function sanitizeToolPlan(plan: any) {
-      const sanitized: any = { ...plan };
-      // Normalize protocols to allowed list
-      const reqProt = Array.isArray(plan.protocols) ? plan.protocols : [];
-      const normProt = reqProt
-        .map((p: string) => (typeof p === 'string' ? p.trim().toLowerCase() : ''))
-        .filter(Boolean);
-      const filteredProt = normProt.filter((p: string) => AVAILABLE_PROTOCOLS.includes(p));
-      if (filteredProt.length) sanitized.protocols = filteredProt;
-      else delete sanitized.protocols; // let defaults apply
-
-      // Normalize itemTypes
-      const reqTypes = Array.isArray(plan.itemTypes) ? plan.itemTypes : [];
-      const filteredTypes = reqTypes.filter((t: string) => AVAILABLE_ITEM_TYPES.includes(t));
-      if (filteredTypes.length) sanitized.itemTypes = filteredTypes;
-      else delete sanitized.itemTypes;
-
-      // rawPosts is handled via a separate decision step; nothing to sanitize here
-
-      // Do not alter LLM-provided query; rely on prompt instructions for concision
-      return sanitized;
-    }
-
-    // Helper: Execute tool plan
-    async function runSearchTool(
-      plan: Awaited<ReturnType<typeof pickSearchTool>>,
-      fallbackQuery: string
-    ) {
-      // Sanitize before use
-      plan = sanitizeToolPlan(plan) as any;
-      const topK = plan.limit ?? 6;
-      // Apply defaults and constraints
-      const requestedProtocols = plan.protocols || [];
-      const filteredProtocols = requestedProtocols.filter((p) => AVAILABLE_PROTOCOLS.includes(p));
-      const protocols = filteredProtocols.length ? filteredProtocols : AVAILABLE_PROTOCOLS;
-      const itemTypes = (plan.itemTypes || []).filter((t) => AVAILABLE_ITEM_TYPES.includes(t));
-      const safeItemTypes = itemTypes.length ? itemTypes : undefined;
-      const attempts: any[] = [];
-      const q = plan.query || fallbackQuery;
-      async function tryHybrid(th?: number, broaden?: boolean) {
-        const params: any = {
-          query: q,
-          topK,
-          protocols,
-          similarityThreshold: th ?? plan.similarityThreshold,
-        };
-        if (!broaden && safeItemTypes) params.itemTypes = safeItemTypes;
-        const docs = await ctx.x23.hybridSearch(params);
-        attempts.push({
-          tool: 'hybrid',
-          query: q,
-          similarityThreshold: params.similarityThreshold,
-          itemTypes: params.itemTypes,
-          resultCount: docs.length,
-        });
-        return docs;
-      }
-      async function tryVector(th?: number, broaden?: boolean) {
-        const params: any = {
-          query: q,
-          topK,
-          protocols,
-          similarityThreshold: th ?? plan.similarityThreshold,
-        };
-        if (!broaden && safeItemTypes) params.itemTypes = safeItemTypes;
-        const docs = await ctx.x23.vectorSearch(params);
-        attempts.push({
-          tool: 'vector',
-          query: q,
-          similarityThreshold: params.similarityThreshold,
-          itemTypes: params.itemTypes,
-          resultCount: docs.length,
-        });
-        return docs;
-      }
-      async function tryKeyword(broaden?: boolean) {
-        const params: any = { query: q, topK, protocols };
-        if (!broaden && safeItemTypes) params.itemTypes = safeItemTypes;
-        const docs = await ctx.x23.keywordSearch(params);
-        attempts.push({
-          tool: 'keyword',
-          query: q,
-          itemTypes: params.itemTypes,
-          resultCount: docs.length,
-        });
-        return docs;
-      }
-      if (plan.tool === 'none') {
-        const docs = payloadDocs.slice(0, 6);
-        attempts.push({ tool: 'none', resultCount: docs.length });
-        return { docs, attempts };
-      }
-      if (plan.tool === 'hybrid') {
-        let docs = await tryHybrid();
-        if (docs.length === 0) {
-          const lowered = Math.max(0.15, (plan.similarityThreshold ?? 0.4) - 0.1);
-          docs = await tryHybrid(lowered, true);
-        }
-        if (docs.length === 0) {
-          docs = await tryKeyword(true);
-        }
-        return { docs, attempts };
-      }
-      if (plan.tool === 'vector') {
-        let docs = await tryVector();
-        if (docs.length === 0) {
-          const lowered = Math.max(0.15, (plan.similarityThreshold ?? 0.4) - 0.1);
-          docs = await tryVector(lowered, true);
-        }
-        if (docs.length === 0) {
-          docs = await tryHybrid((plan.similarityThreshold ?? 0.4) - 0.05, true);
-        }
-        return { docs, attempts };
-      }
-      if (plan.tool === 'keyword') {
-        let docs = await tryKeyword();
-        if (docs.length === 0) {
-          docs = await tryHybrid(0.3, true);
-        }
-        return { docs, attempts };
-      }
-      return { docs: [] as DocChunk[], attempts };
-    }
-
-    async function maybeExpandWithRawPosts(claim: string, docs: DocChunk[]) {
-      try {
-        // Provide top discussion-like doc to the LLM for decision
-        const top =
-          docs.find((d) => (d.source || '').toLowerCase().includes('discussion')) || docs[0];
-        if (!top || !top.uri) return undefined;
-        const decision = await llm.extractJSON<{
-          useRawPosts: boolean;
-          discussionUrl?: string;
-          topicId?: string;
-          minimumUnix?: number;
-        }>(
-          sys(RAW_POSTS_DECISION_PROMPT),
-          `Claim: ${claim}\nDoc: ${JSON.stringify(top)}`,
-          RAW_POSTS_DECISION_SCHEMA as any,
-          { schemaName: 'rawPostsDecision', maxOutputTokens: 4000 }
-        );
-        if (!decision.useRawPosts) return undefined;
-        // Always use the configured forum root; extract topicId from decision or doc URI.
-        const discussionUrl = DISCUSSION_URL;
-        let topicId = decision.topicId;
-        if (!topicId && typeof top.uri === 'string') {
-          const m = top.uri.match(/(\d+)(?!.*\d)/);
-          if (m) topicId = m[1];
-        }
-        if (!topicId) return undefined;
-        const posts = await ctx.x23.getDiscussionPosts({
-          discussionUrl,
-          topicId,
-          minimumUnix: decision.minimumUnix,
-        });
-        const rawDoc: DocChunk = {
-          id: `${topicId}:raw`,
-          title: 'Discussion raw posts',
-          uri: discussionUrl,
-          snippet: posts[0]?.body?.slice(0, 1200),
-          source: 'discussion',
-        };
-        return rawDoc;
-      } catch {
-        return undefined;
-      }
-    }
-
-    async function maybeExpandWithOfficialDetail(claim: string, docs: DocChunk[]) {
-      try {
-        const hasOfficial = docs.some((d) => (d.source || '').toLowerCase() === 'officialdoc');
-        if (!hasOfficial) return undefined;
-        const decision = await llm.extractJSON<{ useOfficialDetail: boolean; question?: string }>(
-          sys(OFFICIAL_DETAIL_DECISION_PROMPT),
-          `Claim: ${claim}\nOfficialCitations: ${JSON.stringify(docs.filter((d) => (d.source || '').toLowerCase() === 'officialdoc').slice(0, 3))}`,
-          OFFICIAL_DETAIL_DECISION_SCHEMA as any,
-          { schemaName: 'officialDetailDecision', maxOutputTokens: 4000 }
-        );
-        if (!decision.useOfficialDetail) return undefined;
-        const q = (decision.question || claim).slice(0, 256);
-        const ans = await ctx.x23.officialHybridAnswer({
-          query: q,
-          topK: 5,
-          protocols: AVAILABLE_PROTOCOLS,
-          similarityThreshold: 0.4,
-          realtime: true,
-        });
-        // Represent the detailed answer as a pseudo-doc to feed classification
-        const doc: DocChunk = {
-          id: 'official-detail',
-          title: 'Official doc detail',
-          snippet: ans.answer?.slice(0, 1200),
-          source: 'officialDoc',
-        };
-        return doc;
-      } catch {
-        return undefined;
-      }
-    }
+    // Evidence acquisition helpers moved to shared toolkit (evidence.ts)
 
     // Helper: Evaluate claim
     async function evalClaim(claim: string, docs: DocChunk[], answerHint?: string) {
@@ -480,8 +262,10 @@ export const FactSleuth: FactCheckerAgent = {
       }
 
       if (arithmeticPlan?.checks?.length) {
-        log.info(`FactChecker: evaluating ${arithmeticPlan.checks.length} arithmetic checks`);
-        for (const chk of arithmeticPlan.checks) {
+        const maxArith = Number(process.env.FACT_MAX_ARITH_CHECKS || 0);
+        const arithChecks = maxArith > 0 ? arithmeticPlan.checks.slice(0, maxArith) : arithmeticPlan.checks;
+        log.info(`FactChecker: evaluating ${arithChecks.length} arithmetic checks${maxArith > 0 ? ` (capped from ${arithmeticPlan.checks.length})` : ''}`);
+        for (const chk of arithChecks) {
           try {
             const value = evaluateExpression(chk.expression);
             let status: ClaimStatus = 'supported';
@@ -563,57 +347,21 @@ export const FactSleuth: FactCheckerAgent = {
 
       let zeroDocStreak = 0;
       for (let iter = 0; iter < maxFactIters; iter++) {
-        const plan = await llm.extractJSON<Awaited<ReturnType<typeof pickSearchTool>>>(
-          [
-            SEARCH_TOOL_SELECTOR_SYSTEM_PROMPT,
-            '- If a previous attempt returned 0 docs, try a different endpoint (keyword/vector/hybrid), rewrite the query, broaden protocols, or lower similarityThreshold (e.g., 0.3→0.2).',
-          ].join('\n'),
-          `Claim: ${a.claim}\nHints: ${JSON.stringify(a.evidenceHints || [])}\nProvidedPayload:\n${payloadDigest || '(none)'}\nPreviouslyTried: ${JSON.stringify(tried)}`,
-          SEARCH_TOOL_SELECTOR_SCHEMA as any,
-          { schemaName: 'searchToolPlan', maxOutputTokens: 2500 }
-        );
+        const plan = await selectSearchTool(ctx, llm, {
+          rolePrompt: role,
+          claimOrQuery: a.claim,
+          hints: a.evidenceHints || [],
+          payloadDigest,
+          previouslyTried: tried,
+        });
         tried.push({ tool: (plan as any).tool, query: (plan as any).query });
         log.info(
           `FactChecker: [${idxFact}/${totalFacts}] tool '${(plan as any).tool}' for claim '${a.claim}'`
         );
-        // Optional: rewrite query to concise keyword-style form
-        const vRewrite = String(process.env.FACT_ENABLE_QUERY_REWRITE || '1').toLowerCase();
-        const enableRewrite = !(vRewrite === '0' || vRewrite === 'false' || vRewrite === 'no');
-        if (enableRewrite && plan && typeof plan.query === 'string') {
-          try {
-            const rewrite = await llm.extractJSON<{ query: string }>(
-              sys(QUERY_REWRITE_SYSTEM_PROMPT),
-              `Claim: ${a.claim}\nOriginalQuery: ${plan.query || ''}\nTitle: ${ctx.proposal.title}`,
-              QUERY_REWRITE_SCHEMA as any,
-              { schemaName: 'queryRewrite', maxOutputTokens: 2000 }
-            );
-            const before = (plan.query || '').trim();
-            const after = (rewrite?.query || '').trim();
-            // Heuristics: keep if non-empty and not longer than before
-            const mustPreserve: string[] = [];
-            // preserve numeric ids and protocol names
-            (before.match(/\b\d+\b/g) || []).forEach((m) => mustPreserve.push(m));
-            AVAILABLE_PROTOCOLS.forEach((p) => {
-              if (before.toLowerCase().includes(p)) mustPreserve.push(p);
-            });
-            const preserves = mustPreserve.every((t) =>
-              after.toLowerCase().includes(t.toLowerCase())
-            );
-            if (after && after.length <= before.length && preserves) {
-              log.info(`FactChecker: query rewrite applied for tool '${plan.tool}'`, {
-                before,
-                after,
-              });
-              (plan as any).query = after;
-            } else {
-              log.info('FactChecker: query rewrite skipped (preservation/length check failed)');
-            }
-          } catch {}
-        }
-        const exec = await runSearchTool(plan as any, a.claim);
+        const exec = await runSearchTool(ctx, plan as any, a.claim);
         // Optionally expand with raw posts if needed
-        const rawDoc = await maybeExpandWithRawPosts(a.claim, exec.docs);
-        const offDoc = await maybeExpandWithOfficialDetail(a.claim, exec.docs);
+        const rawDoc = await maybeExpandWithRawPosts(ctx, llm, role, a.claim, exec.docs);
+        const offDoc = await maybeExpandWithOfficialDetail(ctx, llm, role, a.claim, exec.docs);
         const docsForEval = [rawDoc, offDoc].filter(Boolean).concat(exec.docs) as DocChunk[];
         const retCount = exec.docs?.length || 0;
         log.info(`FactChecker: tool returned ${retCount} docs`);

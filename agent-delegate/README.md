@@ -50,6 +50,8 @@ Recommended/Configurable:
 - `JUDGE_CONFIDENCE`: Threshold 0..1 to accept judge decision (default `0.5`).
 - `FACT_MAX_ITERS`: Max refinement iterations per assumption in fact checking (default `2`).
 - `FACT_MAX_CHECKS`: Upper limit on number of assumptions the fact checker evaluates (processes the first N; `0` or unset processes all).
+- `FACT_MAX_ARITH_CHECKS`: Upper limit on number of arithmetic checks to evaluate (first N; `0` or unset processes all).
+- `SAVE_TRACE_JSON`: set to `1`/`true` to write the full reasoning trace to a JSON file after the run. Use `TRACE_JSON_PATH` to override the output path (default `dist/trace-proposal-<id>-<timestamp>.json`).
 - `FACT_MIN_CITATIONS`: Minimum citations required to consider a claim sufficiently evidenced (default `1`).
 - `FACT_MIN_CONFIDENCE`: Minimum confidence (0..1) from the fact-checker’s LLM classification to accept a claim without further refinement (default `0.6`).
 
