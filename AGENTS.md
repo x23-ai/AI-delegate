@@ -13,6 +13,8 @@
   - `SEARCH_TOOL_SELECTOR_*` for selecting between `keyword`/`vector`/`hybrid`/`officialHybrid` search tools.
   - `SEED_SEARCH_*` to derive a concise, search-optimized seed query.
   - `RAW_POSTS_DECISION_*` to decide when to fetch raw forum posts for added context.
+  - `QUERY_REWRITE_*` to rewrite search queries (enabled by default). Disable via `FACT_ENABLE_QUERY_REWRITE=0`.
+  - `OFFICIAL_DETAIL_DECISION_*` to request detailed answers from official docs after citations (similar to rawPosts behavior).
 - x23 API client: `agent-delegate/src/tools/x23.ts` maps API responses to compact `DocChunk` structures (title, uri, snippet/tldr/digest, source, timestamps, score). Only relevant fields per the `agent-delegate/x23ai API spec.yaml` are surfaced.
 - Separation of tools:
   - Search tools return digests/snippets: `keyword`, `vector`, `hybrid`, `officialHybrid` (answer + citations).

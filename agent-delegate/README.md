@@ -16,12 +16,21 @@ This package orchestrates multi‑agent evaluation of governance proposals (plan
   - `SEARCH_TOOL_SELECTOR_SYSTEM_PROMPT` + `SEARCH_TOOL_SELECTOR_SCHEMA` – pick search tool: `keyword`, `vector`, `hybrid`, `officialHybrid`.
   - `SEED_SEARCH_SYSTEM_PROMPT` + `SEED_SEARCH_SCHEMA` – produce a concise, search-optimized seed query.
   - `RAW_POSTS_DECISION_PROMPT` + `RAW_POSTS_DECISION_SCHEMA` – decide if raw discussion posts are needed for added context.
+  - `QUERY_REWRITE_SYSTEM_PROMPT` + `QUERY_REWRITE_SCHEMA` – rewrite search queries concisely (enabled by default; set `FACT_ENABLE_QUERY_REWRITE=0` to disable).
+  - `OFFICIAL_DETAIL_DECISION_PROMPT` + `OFFICIAL_DETAIL_DECISION_SCHEMA` – request official-docs detail after citations when the digest/snippet is insufficient.
 
 - x23 client mapping: `src/tools/x23.ts`
   - Maps API responses to compact `DocChunk` objects using only relevant fields per `agent-delegate/x23ai API spec.yaml`:
     - `id`, `title`, `uri` (`appUrl`/`sourceUrl`), `snippet` (`tldr`/`digest`/`headline`), `source` (`type`/`protocol`), `publishedAt`, `score`.
   - Search tools return digests/snippets; `officialHybridAnswer` returns `{ answer, citations }`.
   - `rawPosts` is a separate endpoint to fetch full forum thread content when necessary.
+
+### Retrieval Pattern: Search → (Optional) Detail
+
+- Search tools (`keyword`, `vector`, `hybrid`, `officialHybrid` with `realtime=false`) retrieve high-signal digests/snippets and citations.
+- If a discussion citation needs more context, the agent can call `rawPosts` to fetch the thread’s raw content.
+- If an official-doc citation needs more detail than the digest, the agent can request an official-doc detail answer (internally calls `officialHybridAnswer` with `realtime=true`) and feed the response back into classification.
+- These detail steps are decided by the LLM and only run when needed (post-citation), keeping calls minimal and focused.
 
 ## Environment Variables
 
@@ -40,6 +49,7 @@ Recommended/Configurable:
 - `ORCH_MAX_ITERS`: Max refinement iterations per stage (default `2`).
 - `JUDGE_CONFIDENCE`: Threshold 0..1 to accept judge decision (default `0.5`).
 - `FACT_MAX_ITERS`: Max refinement iterations per assumption in fact checking (default `2`).
+- `FACT_MAX_CHECKS`: Upper limit on number of assumptions the fact checker evaluates (processes the first N; `0` or unset processes all).
 - `FACT_MIN_CITATIONS`: Minimum citations required to consider a claim sufficiently evidenced (default `1`).
 - `FACT_MIN_CONFIDENCE`: Minimum confidence (0..1) from the fact-checker’s LLM classification to accept a claim without further refinement (default `0.6`).
 
@@ -60,6 +70,11 @@ On‑chain (not required initially):
 - Traces are recorded via `TraceBuilder` and can be published/hashed later.
 - LLM logging: token counts per call at info level with clear labels (operation + schema). With `DEBUG=1`, raw JSON/text and schemas are printed.
 - x23 logging: raw API JSON is printed when `DEBUG=1`. Each x23 tool method also logs the mapped return object at info level with a clear method label.
+- Debug levels:
+  - `DEBUG_LEVEL=0` (default): no extra debug payloads.
+  - `DEBUG_LEVEL=1`: log raw JSON objects (LLM schemas, LLM responses, x23 responses) at debug level.
+  - `DEBUG_LEVEL=2`: include raw LLM text in debug logs in addition to JSON.
+  - Use `LOG_LEVEL=debug` to display these debug logs; otherwise only info/warn/error show.
 - Arithmetic checks: the fact checker evaluates simple expressions and common finance terms:
   - k/M/B, million/billion/thousand, commas, currency `$`
   - `% of` and `bps` (basis points)

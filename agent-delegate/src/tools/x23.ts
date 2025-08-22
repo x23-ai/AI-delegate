@@ -53,6 +53,14 @@ export interface TimelineItem {
 
 import { log, colors } from '../utils/logger.js';
 
+function getDebugLevel(): number {
+  const d = String(process.env.DEBUG || '').trim().toLowerCase();
+  if (d === '1' || d === 'true' || d === 'yes') return 1;
+  const lvl = Number(process.env.DEBUG_LEVEL || '0');
+  return Number.isFinite(lvl) ? Math.max(0, Math.min(3, lvl)) : 0;
+}
+const DEBUG_LEVEL = getDebugLevel();
+
 const DEBUG = (() => {
   const v = String(process.env.DEBUG || '').toLowerCase();
   return v === '1' || v === 'true' || v === 'yes';
@@ -89,13 +97,11 @@ export class X23Client {
         log.error(`${colors.cyan('x23 response')} ${colors.red('✗')} ${method} ${path} ${colors.dim(`(${ms}ms)`)} ${colors.red(String(res.status))}`);
         throw new Error(`x23 ${path} ${res.status} (${ms}ms): ${text}`);
       }
-      spinner.stop(`${colors.green('✓')} x23 ${method} ${path} ${colors.dim(`(${ms}ms)`)}`);
-      log.info(`${colors.cyan('x23 response')} ${colors.green('✓')} ${method} ${path} ${colors.dim(`(${ms}ms)`)}`);
+      spinner.stop();
       const json = (await res.json()) as T;
-      if (DEBUG) {
+      if (DEBUG_LEVEL >= 1) {
         try {
-          console.log(`[DEBUG] x23 raw JSON ${method} ${path}:`);
-          console.log(JSON.stringify(json, null, 2));
+          log.debug('x23 raw response', { method, path, ms, json });
         } catch {}
       }
       return json;
@@ -105,8 +111,10 @@ export class X23Client {
     }
   }
 
-  private toIso(unix?: number): string | undefined {
-    return typeof unix === 'number' ? new Date(unix * 1000).toISOString() : undefined;
+  private toIso(unix?: number | string): string | undefined {
+    const n = typeof unix === 'number' ? unix : typeof unix === 'string' ? Number(unix) : NaN;
+    if (!Number.isFinite(n)) return undefined;
+    return new Date(n * 1000).toISOString();
   }
 
   private mapItemToDocChunk(item: any): DocChunk {
@@ -144,7 +152,7 @@ export class X23Client {
     };
     const data = await this.req<Resp>('/keywordSearch', { method: 'POST', body: JSON.stringify(body) });
     const ret = (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
-    try { log.info('x23 return keywordSearch', ret); } catch {}
+    log.info(`x23 keywordSearch: ${ret.length} docs`);
     return ret;
   }
 
@@ -160,7 +168,7 @@ export class X23Client {
     };
     const data = await this.req<Resp>('/ragSearch', { method: 'POST', body: JSON.stringify(body) });
     const ret = (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
-    try { log.info('x23 return vectorSearch', ret); } catch {}
+    log.info(`x23 vectorSearch: ${ret.length} docs`);
     return ret;
   }
 
@@ -176,7 +184,7 @@ export class X23Client {
     };
     const data = await this.req<Resp>('/hybridSearch', { method: 'POST', body: JSON.stringify(body) });
     const ret = (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
-    try { log.info('x23 return hybridSearch', ret); } catch {}
+    log.info(`x23 hybridSearch: ${ret.length} docs`);
     return ret;
   }
 
@@ -193,7 +201,7 @@ export class X23Client {
     const data = await this.req<Resp>('/officialDocSearch', { method: 'POST', body: JSON.stringify(body) });
     const citations = (data.result?.results ?? []).map((it) => this.mapItemToDocChunk(it));
     const ret = { answer: data.result?.answer ?? '', citations };
-    try { log.info('x23 return officialHybridAnswer', ret); } catch {}
+    log.info(`x23 officialDoc detail: ${ret.citations.length} citations, answer=${ret.answer ? 'yes' : 'no'}`);
     return ret;
   }
 
@@ -237,7 +245,7 @@ export class X23Client {
         uri: discussionUrl,
       },
     ];
-    try { log.info('x23 return getDiscussionPosts', ret); } catch {}
+    log.info(`x23 rawPosts: ${raw ? raw.length : 0} chars returned`);
     return ret;
   }
 
@@ -258,7 +266,7 @@ export class X23Client {
       uri: it.appUrl || it.sourceUrl,
       meta: { protocol: it.protocol, type: it.type },
     }));
-    try { log.info('x23 return getTimeline', ret); } catch {}
+    log.info(`x23 timeline: ${ret.length} items`);
     return ret;
   }
 }

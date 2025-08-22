@@ -21,6 +21,9 @@ export const PlannerNavigator: PlannerAgent = {
       .slice(0, 8)
       .map((p, i) => `P${i + 1}: [${p.type}] ${p.uri || ''}`)
       .join('\n');
+    const schemaName = process.env.PLANNER_SCHEMA_NAME || 'plannerPlan';
+    const traceLabel =
+      process.env.PLANNER_TRACE_LABEL || 'Planner created initial objectives and tasks';
     const plan = await llm.extractJSON<PlanningOutput>(
       `${role}\n\n${PLANNER_PROMPT_SYSTEM_SUFFIX}`,
       `Title: ${ctx.proposal.title}\nDescription: ${ctx.proposal.description}\nPayload:\n${payloadDigest || '(none)'}\n`,
@@ -34,7 +37,7 @@ export const PlannerNavigator: PlannerAgent = {
         },
         required: ['objectives', 'tasks'],
       },
-      { schemaName: 'plannerPlan', maxOutputTokens: 2000 }
+      { schemaName, maxOutputTokens: 3000 }
     );
     const objectives = plan.objectives || [];
     const tasks = plan.tasks || [];
@@ -45,7 +48,7 @@ export const PlannerNavigator: PlannerAgent = {
       .map((p) => ({ source: p.type || 'payload', uri: p.uri! }));
     ctx.trace.addStep({
       type: 'planning',
-      description: 'Planner created initial objectives and tasks',
+      description: traceLabel,
       output: { objectives, tasks },
       references: refs,
     });

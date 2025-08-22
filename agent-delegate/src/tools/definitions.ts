@@ -4,10 +4,8 @@ import { AVAILABLE_PROTOCOLS, AVAILABLE_ITEM_TYPES, DISCUSSION_URL } from '../ut
 
 export const SEARCH_TOOL_SELECTOR_SYSTEM_PROMPT = [
   'You are a search tool selector for fact checking governance claims. Choose exactly one search tool and parameters to retrieve evidence.',
-  '- Search tools: keyword, vector, hybrid, officialHybrid.',
+  "- Search tools: keyword, vector, hybrid, or 'none' if no search is needed.",
   '- For keyword/vector/hybrid: output a short, concise keyword query (<= 10 words), optimized for search engines. Avoid filler words.',
-  '- For officialHybrid when you want a synthesized natural-language answer, set realtime=true and produce a natural-language question.',
-  '- For officialHybrid when you want matching official docs only, set realtime=false and produce a keyword-style query (<= 10 words).',
   `- Available protocols: ${AVAILABLE_PROTOCOLS.join(', ')} (default to these if unset).`,
   `- Allowed itemTypes: ${AVAILABLE_ITEM_TYPES.join(', ')} (subset as needed).`,
   'Do not include rawPosts here — that is a separate tool to fetch raw discussion thread content when needed later.',
@@ -17,7 +15,7 @@ export const SEARCH_TOOL_SELECTOR_SYSTEM_PROMPT = [
 export const SEARCH_TOOL_SELECTOR_SCHEMA = {
   type: 'object',
   properties: {
-    tool: { type: 'string', enum: ['officialHybrid', 'hybrid', 'vector', 'keyword'] },
+    tool: { type: 'string', enum: ['hybrid', 'vector', 'keyword', 'none'] },
     query: { type: 'string' },
     limit: { type: 'number' },
     similarityThreshold: { type: 'number' },
@@ -30,9 +28,9 @@ export const SEARCH_TOOL_SELECTOR_SCHEMA = {
       type: 'array',
       items: { type: 'string', enum: AVAILABLE_ITEM_TYPES as any },
     },
-    realtime: { type: 'boolean' },
+    // no generic realtime flag in search selection; handled in a separate official-doc detail step
   },
-  required: ['tool', 'query'],
+  required: ['tool'],
 } as const;
 
 // Seed search planning — prompts and schemas
@@ -55,7 +53,7 @@ export const SEED_SEARCH_SCHEMA = {
 export const RAW_POSTS_DECISION_PROMPT = [
   'You decide if more context is required from a discussion thread to evaluate the claim.',
   '- If the most relevant evidence is a discussion item and the digest/snippet seems insufficient to judge the claim, request raw posts.',
-  `- Raw posts require discussionUrl=${DISCUSSION_URL} and topicId. Extract topicId from the URI (the last numeric segment).`,
+  `- Raw posts must use discussionUrl=${DISCUSSION_URL} and provide topicId. Extract topicId from the discussion URI if needed (the last numeric segment).`,
   'Return JSON: { useRawPosts: boolean, discussionUrl?: string, topicId?: string, minimumUnix?: number }',
 ].join('\n');
 
@@ -68,4 +66,35 @@ export const RAW_POSTS_DECISION_SCHEMA = {
     minimumUnix: { type: 'number' },
   },
   required: ['useRawPosts'],
+} as const;
+
+// Optional: request a more detailed official-docs answer (post-citation)
+export const OFFICIAL_DETAIL_DECISION_PROMPT = [
+  'You decide if more detail is needed from official documentation beyond the digest/snippet to evaluate the claim.',
+  '- WARNING: official detail (realtime) is slow. Prefer evaluating the cited docs directly if possible.',
+  '- Only use official detail when there is a single, specific officialDoc URL clearly relevant to the claim AND an answer must be extracted from deep inside that document.',
+  'Return JSON: { useOfficialDetail: boolean, question?: string } (ask a short specific question if true).',
+].join('\n');
+
+export const OFFICIAL_DETAIL_DECISION_SCHEMA = {
+  type: 'object',
+  properties: {
+    useOfficialDetail: { type: 'boolean' },
+    question: { type: 'string' },
+  },
+  required: ['useOfficialDetail'],
+} as const;
+
+// Query rewrite (search-optimized, concise)
+export const QUERY_REWRITE_SYSTEM_PROMPT = [
+  'Rewrite the input search query into a concise keyword-style form (<= 10 words) optimized for search engines.',
+  '- Preserve critical entities and identifiers (protocol names, tickers, topic IDs, proposal IDs, repo/name).',
+  '- Avoid filler words; prefer nouns and exact artifact names.',
+  'Return JSON { query: string } only.',
+].join('\n');
+
+export const QUERY_REWRITE_SCHEMA = {
+  type: 'object',
+  properties: { query: { type: 'string' } },
+  required: ['query'],
 } as const;

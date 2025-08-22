@@ -18,10 +18,17 @@ export const CogitoSage: ReasonerAgent = {
     const facts: any = ctx.cache?.get('facts') || {};
     const planning: any = ctx.cache?.get('planning') || {};
     const input = {
-      proposal: { id: ctx.proposal.id, title: ctx.proposal.title, description: ctx.proposal.description },
+      proposal: {
+        id: ctx.proposal.id,
+        title: ctx.proposal.title,
+        description: ctx.proposal.description,
+      },
       planning,
       facts,
     };
+    const schemaName = process.env.REASONER_SCHEMA_NAME || 'reasoningOut';
+    const traceLabel =
+      process.env.REASONER_TRACE_LABEL || 'Reasoner drafted preliminary argument with premises';
     const out = await llm.extractJSON<ReasoningOutput>(
       `${role}\n\n${REASONER_PROMPT_SYSTEM_SUFFIX}`,
       JSON.stringify(input).slice(0, 6000),
@@ -34,14 +41,14 @@ export const CogitoSage: ReasonerAgent = {
         },
         required: ['argument', 'premises'],
       },
-      { schemaName: 'reasoningOut', maxOutputTokens: 3000 }
+      { schemaName, maxOutputTokens: 4500 }
     );
     const premises = out.premises || [];
     const argument = out.argument || '';
 
     ctx.trace.addStep({
       type: 'reasoning',
-      description: 'Reasoner drafted preliminary argument with premises',
+      description: traceLabel,
       output: { premises, outline: argument },
     });
 

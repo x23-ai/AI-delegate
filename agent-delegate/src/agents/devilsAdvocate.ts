@@ -18,6 +18,8 @@ export const RedTeamRaven: DevilsAdvocateAgent = {
     const reasoning: any = ctx.cache?.get('reasoning') || {};
     const facts: any = ctx.cache?.get('facts') || {};
     const input = { reasoning, facts };
+    const schemaName = process.env.DEVILS_SCHEMA_NAME || 'challengeOut';
+    const traceLabel = process.env.DEVILS_TRACE_LABEL || "Devil's advocate raised counterpoints and failure modes";
     const out = await llm.extractJSON<ChallengeOutput>(
       `${role}\n\n${DEVILS_ADVOCATE_PROMPT_SYSTEM_SUFFIX}`,
       JSON.stringify(input).slice(0, 6000),
@@ -29,14 +31,14 @@ export const RedTeamRaven: DevilsAdvocateAgent = {
         },
         required: ['counterpoints'],
       },
-      { schemaName: 'challengeOut', maxOutputTokens: 2000 }
+      { schemaName, maxOutputTokens: 2000 }
     );
     const counterpoints = out.counterpoints || [];
     const failureModes = out.failureModes || [];
 
     ctx.trace.addStep({
       type: 'challenge',
-      description: "Devil's advocate raised counterpoints and failure modes",
+      description: traceLabel,
       output: { counterpoints, failureModes },
     });
 

@@ -10,18 +10,8 @@ import { ArbiterSolon } from './judge.js';
 import { log } from '../utils/logger.js';
 
 // LLM prompts (editable)
-const CONDUCTOR_SCORE_PROMPT = (stage: string) =>
-  `You rate the ${stage} stage quality on a 0..1 scale. Consider completeness, clarity, and adequacy for downstream judgment. Return JSON { confidence:number, notes?:string }`;
 const CONDUCTOR_PLANNING_QA_PROMPT =
   'You are planning QA. Evaluate if objectives and tasks are sufficient to assess a governance proposal. Return JSON { satisfied: boolean, missing: string[] }';
-const CONDUCTOR_FACT_QA_PROMPT =
-  'You validate fact-check sets for coverage and citations. Return JSON { satisfied: boolean, missingCitations: number } where satisfied means there is sufficient evidence to proceed.';
-const CONDUCTOR_REASONING_QA_PROMPT =
-  'You are a reasoning QA. Assess coherence and identify gaps. Return JSON { coherent: boolean, gaps: string[] }';
-const CONDUCTOR_CHALLENGE_QA_PROMPT =
-  'You are a red-team QA. Ensure counterpoints/failure modes are substantive. Return JSON { robust: boolean, missingRisks: number }.';
-const CONDUCTOR_JUDGE_QA_PROMPT =
-  'You evaluate if a recommendation is justified. Return JSON { accept: boolean, confidence: number } with confidence 0..1.';
 
 /**
  * Conductor orchestrates the multi-agent workflow. It does not hold policy
@@ -36,28 +26,7 @@ export async function runConductor(
   const conductorRole = loadRolePrompt('src/agents/roles/conductor.md');
   const sys = (s: string) => `${conductorRole}\n\n${s}`;
   const maxIters = Number(process.env.ORCH_MAX_ITERS || 2);
-  const judgeThreshold = Number(process.env.JUDGE_CONFIDENCE || 0.5);
-
-  async function scoreStage(stage: string, content: unknown): Promise<number | undefined> {
-    if (!llm) return undefined;
-    const res = await llm.extractJSON<{ confidence: number; notes?: string }>(
-      CONDUCTOR_SCORE_PROMPT(stage),
-      JSON.stringify(content).slice(0, 6000),
-      {
-        type: 'object',
-        properties: { confidence: { type: 'number' }, notes: { type: 'string' } },
-        required: ['confidence'],
-      },
-      { schemaName: `${stage}Score` }
-    );
-    ctx.trace.addStep({
-      type: 'analysis',
-      description: `${stage} confidence scored`,
-      input: content,
-      output: res,
-    });
-    return res.confidence;
-  }
+  // Note: only planning maintains a QA pass; other stages run once.
 
   // 1) Planning loop
   const totalPhases = 5;
@@ -87,7 +56,7 @@ export async function runConductor(
         },
         required: ['satisfied', 'missing'],
       },
-      { schemaName: 'planningQA', maxOutputTokens: 2000 }
+      { schemaName: 'planningQA', maxOutputTokens: 4000 }
     );
     ctx.trace.addStep({
       type: 'planning',
@@ -95,143 +64,53 @@ export async function runConductor(
       input: planning,
       output: evalPlan,
     });
+    try {
+      const missing = (evalPlan.missing || []).join('; ') || '(none)';
+      log.info(`Planning QA result: satisfied=${evalPlan.satisfied} missing=${missing}`);
+    } catch {}
     if (evalPlan.satisfied) break;
-    // Re-run planner to refine; in future pass feedback
-    planning = await PlannerNavigator.run(ctx);
+    // Re-run planner to refine; label the refinement distinctly
+    const prevSchema = process.env.PLANNER_SCHEMA_NAME;
+    const prevLabel = process.env.PLANNER_TRACE_LABEL;
+    process.env.PLANNER_SCHEMA_NAME = 'plannerPlanRefine';
+    process.env.PLANNER_TRACE_LABEL = `Planner refined objectives and tasks (iter ${i + 2})`;
+    try {
+      planning = await PlannerNavigator.run(ctx);
+    } finally {
+      if (prevSchema === undefined) delete process.env.PLANNER_SCHEMA_NAME;
+      else process.env.PLANNER_SCHEMA_NAME = prevSchema;
+      if (prevLabel === undefined) delete process.env.PLANNER_TRACE_LABEL;
+      else process.env.PLANNER_TRACE_LABEL = prevLabel;
+    }
   }
 
-  // Score planning stage
-  planning.confidence = (await scoreStage('planning', planning)) ?? planning.confidence;
+  // Cache planning stage
   ctx.cache?.set('planning', planning);
 
-  // 2) Fact checking loop
+  // 2) Fact checking (no QA loop)
   log.info(`[2/${totalPhases}] Conductor: starting fact checking`);
   let facts = await FactSleuth.run(ctx);
-  for (let i = 0; i < maxIters; i++) {
-    if (!llm) break;
-    log.info(`Conductor: fact QA iteration ${i + 1}`);
-    const evalFacts = await llm.extractJSON<{ satisfied: boolean; missingCitations: number }>(
-      sys(CONDUCTOR_FACT_QA_PROMPT),
-      `Claims: ${JSON.stringify(facts.claims)}\nEvidence: ${JSON.stringify(facts.keyEvidence)}`,
-      {
-        type: 'object',
-        properties: {
-          satisfied: { type: 'boolean' },
-          missingCitations: { type: 'number' },
-        },
-        required: ['satisfied', 'missingCitations'],
-      },
-      { schemaName: 'factQA', maxOutputTokens: 1000 }
-    );
-    ctx.trace.addStep({
-      type: 'factCheck',
-      description: 'Fact QA check',
-      input: facts,
-      output: evalFacts,
-    });
-    if (evalFacts.satisfied) break;
-    facts = await FactSleuth.run(ctx);
-  }
 
-  // Score facts stage (use provided overall if present)
-  facts.overallConfidence =
-    facts.overallConfidence ?? (await scoreStage('factCheck', facts)) ?? facts.overallConfidence;
+  // Cache facts stage
   ctx.cache?.set('facts', facts);
 
-  // 3) Reasoning loop
+  // 3) Reasoning (no QA loop)
   log.info(`[3/${totalPhases}] Conductor: starting reasoning`);
   let reasoning = await CogitoSage.run(ctx);
-  for (let i = 0; i < maxIters; i++) {
-    if (!llm) break;
-    log.info(`Conductor: reasoning QA iteration ${i + 1}`);
-    const evalReason = await llm.extractJSON<{ coherent: boolean; gaps: string[] }>(
-      sys(CONDUCTOR_REASONING_QA_PROMPT),
-      `Premises: ${JSON.stringify(reasoning.premises)}\nArgument: ${reasoning.argument}`,
-      {
-        type: 'object',
-        properties: {
-          coherent: { type: 'boolean' },
-          gaps: { type: 'array', items: { type: 'string' } },
-        },
-        required: ['coherent', 'gaps'],
-      },
-      { schemaName: 'reasoningQA', maxOutputTokens: 1000 }
-    );
-    ctx.trace.addStep({
-      type: 'reasoning',
-      description: 'Reasoning QA check',
-      input: reasoning,
-      output: evalReason,
-    });
-    if (evalReason.coherent) break;
-    reasoning = await CogitoSage.run(ctx);
-  }
 
-  // Score reasoning stage
-  reasoning.confidence = (await scoreStage('reasoning', reasoning)) ?? reasoning.confidence;
+  // Cache reasoning stage
   ctx.cache?.set('reasoning', reasoning);
 
-  // 4) Challenge loop
+  // 4) Challenge (no QA loop)
   log.info(`[4/${totalPhases}] Conductor: starting devil's advocate`);
   let challenge = await RedTeamRaven.run(ctx);
-  for (let i = 0; i < maxIters; i++) {
-    if (!llm) break;
-    log.info(`Conductor: challenge QA iteration ${i + 1}`);
-    const evalChallenge = await llm.extractJSON<{ robust: boolean; missingRisks: number }>(
-      sys(CONDUCTOR_CHALLENGE_QA_PROMPT),
-      `Counterpoints: ${JSON.stringify(challenge.counterpoints)}\nFailureModes: ${JSON.stringify(challenge.failureModes)}`,
-      {
-        type: 'object',
-        properties: {
-          robust: { type: 'boolean' },
-          missingRisks: { type: 'number' },
-        },
-        required: ['robust', 'missingRisks'],
-      },
-      { schemaName: 'challengeQA', maxOutputTokens: 1000 }
-    );
-    ctx.trace.addStep({
-      type: 'challenge',
-      description: 'Challenge QA check',
-      input: challenge,
-      output: evalChallenge,
-    });
-    if (evalChallenge.robust) break;
-    challenge = await RedTeamRaven.run(ctx);
-  }
 
-  // Score challenge stage
-  challenge.confidence = (await scoreStage('challenge', challenge)) ?? challenge.confidence;
+  // Cache challenge stage
   ctx.cache?.set('challenge', challenge);
 
-  // 5) Adjudication loop
+  // 5) Adjudication (no QA loop)
   log.info(`[5/${totalPhases}] Conductor: starting adjudication`);
   let adjudication = await ArbiterSolon.run(ctx);
-  for (let i = 0; i < maxIters; i++) {
-    if (!llm) break;
-    log.info(`Conductor: adjudication QA iteration ${i + 1}`);
-    const evalJudge = await llm.extractJSON<{ accept: boolean; confidence: number }>(
-      sys(CONDUCTOR_JUDGE_QA_PROMPT),
-      `Recommendation: ${adjudication.recommendation}\nRationale: ${adjudication.rationale}`,
-      {
-        type: 'object',
-        properties: {
-          accept: { type: 'boolean' },
-          confidence: { type: 'number' },
-        },
-        required: ['accept', 'confidence'],
-      },
-      { schemaName: 'judgeQA', maxOutputTokens: 800 }
-    );
-    ctx.trace.addStep({
-      type: 'adjudication',
-      description: 'Judge QA check',
-      input: adjudication,
-      output: evalJudge,
-    });
-    if (evalJudge.accept && evalJudge.confidence >= judgeThreshold) break;
-    adjudication = await ArbiterSolon.run(ctx);
-  }
 
   return { planning, facts, reasoning, challenge, adjudication };
 }

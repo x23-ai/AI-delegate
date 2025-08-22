@@ -1,6 +1,14 @@
 import type { LLMClient, LLMGenerateOptions, LLMExtractOptions } from './types.js';
 import { log, sleep, colors } from '../utils/logger.js';
 
+function getDebugLevel(): number {
+  const d = String(process.env.DEBUG || '').trim().toLowerCase();
+  if (d === '1' || d === 'true' || d === 'yes') return 1;
+  const lvl = Number(process.env.DEBUG_LEVEL || '0');
+  return Number.isFinite(lvl) ? Math.max(0, Math.min(3, lvl)) : 0;
+}
+const DEBUG_LEVEL = getDebugLevel();
+
 interface OpenAIConfig {
   apiKey?: string;
   model?: string;
@@ -37,8 +45,7 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
       log.error(`${colors.cyan('LLM response')} ${colors.red('✗')} ${colors.dim(`(${ms}ms)`)} ${colors.red(String(res.status))}`);
       throw new Error(`OpenAI Responses error ${res.status}: ${text}`);
     }
-    spinner.stop(`${colors.green('✓')} LLM responses completed ${colors.dim(`(${ms}ms)`)}`);
-    log.info(`${colors.cyan('LLM response')} ${colors.green('✓')} ${colors.dim(`(${ms}ms)`)}`);
+    spinner.stop();
     return await res.json();
   }
 
@@ -102,10 +109,10 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
           max_output_tokens: maxTokens,
         };
         if (typeof tempset === 'number') body.temperature = tempset;
-        log.info(`LLM generateText attempt ${attempt} (max_tokens=${maxTokens}) …`);
+        log.info(`LLM text generation attempt ${attempt} (max_tokens=${maxTokens}) …`);
         try {
           const json = await callResponses(body);
-          logTokenUsage('generateText', json, [system, prompt]);
+          logTokenUsage('text', json, [system, prompt]);
           if (DEBUG) {
             try {
               console.log('[DEBUG] LLM raw JSON (generateText):');
@@ -156,9 +163,8 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
 
       const strictSchema = enforceNoAdditionalProps(jsonSchema);
       const schemaName = opts?.schemaName || 'extraction';
-      if (DEBUG) {
-        console.log(`[DEBUG] LLM schema '${schemaName}':`);
-        try { console.log(JSON.stringify(strictSchema, null, 2)); } catch {}
+      if (DEBUG_LEVEL >= 1) {
+        try { log.debug(`LLM schema '${schemaName}'`, strictSchema as any); } catch {}
       }
       const baseMax = opts?.maxOutputTokens ?? 4000;
       const tempset = !isReasoningModel && typeof opts?.temperature === 'number' ? opts.temperature : undefined;
@@ -180,20 +186,16 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
           max_output_tokens: maxTokens,
         } as any;
         if (typeof tempset === 'number') body.temperature = tempset;
-        log.info(`LLM extractJSON '${schemaName}' attempt ${attempt} (max_tokens=${maxTokens}) …`);
+        log.info(`LLM step '${schemaName}' attempt ${attempt} (max_tokens=${maxTokens}) …`);
         try {
           const json = await callResponses(body);
-          logTokenUsage(`extractJSON:${schemaName}`, json, [system, prompt], strictSchema);
-          if (DEBUG) {
-            try {
-              console.log('[DEBUG] LLM raw JSON (extractJSON):');
-              console.log(JSON.stringify(json, null, 2));
-            } catch {}
+          logTokenUsage(`step:${schemaName}`, json, [system, prompt], strictSchema);
+          if (DEBUG_LEVEL >= 1) {
+            try { log.debug('LLM raw JSON', json); } catch {}
           }
           const text = pickOutputText(json);
-          if (DEBUG) {
-            console.log('[DEBUG] LLM raw text:');
-            console.log(text);
+          if (DEBUG_LEVEL >= 2) {
+            try { log.debug('LLM raw text', { text }); } catch {}
           }
           const raw = JSON.parse(text);
           const { value, errors } = (function validateWrapper() {
@@ -269,14 +271,11 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
           return validateAndPrune(strictSchema, raw);
           })();
           if (errors.length) {
-            if (DEBUG) console.error('[DEBUG] LLM validation errors:', errors);
+            if (DEBUG_LEVEL >= 1) log.debug('LLM validation errors', errors);
             throw new Error(`LLM JSON failed schema validation: ${errors.join('; ')}`);
           }
-          if (DEBUG) {
-            try {
-              console.log(`[DEBUG] LLM parsed object (${schemaName}):`);
-              console.log(JSON.stringify(value, null, 2));
-            } catch {}
+          if (DEBUG_LEVEL >= 1) {
+            try { log.debug(`LLM parsed object (${schemaName})`, value as any); } catch {}
           }
           return value as T;
         } catch (e) {
@@ -355,14 +354,11 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
           }
             const { value, errors } = validateAndPrune(strictSchema, j.output);
             if (errors.length) {
-              if (DEBUG) console.error('[DEBUG] LLM validation errors:', errors);
+              if (DEBUG_LEVEL >= 1) log.debug('LLM validation errors', errors);
               throw new Error(`LLM JSON failed schema validation: ${errors.join('; ')}`);
             }
-            if (DEBUG) {
-              try {
-                console.log(`[DEBUG] LLM parsed object (${schemaName}) from provider output:`);
-                console.log(JSON.stringify(value, null, 2));
-              } catch {}
+            if (DEBUG_LEVEL >= 1) {
+              try { log.debug(`LLM parsed object (${schemaName}) from provider output`, value as any); } catch {}
             }
             return value as T;
           }

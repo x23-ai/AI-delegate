@@ -27,6 +27,9 @@ export const ArbiterSolon: JudgeAgent = {
       challenge,
     };
 
+    const schemaName = process.env.JUDGE_SCHEMA_NAME || 'judgment';
+    const traceLabel =
+      process.env.JUDGE_TRACE_LABEL || 'Judge produced recommendation with confidence';
     const result = await llm.extractJSON<{
       recommendation: 'for' | 'against' | 'abstain' | 'defer';
       rationale: string;
@@ -43,15 +46,19 @@ export const ArbiterSolon: JudgeAgent = {
         },
         required: ['recommendation', 'rationale', 'confidence'],
       },
-      { schemaName: 'judgment', maxOutputTokens: 1600 }
+      { schemaName, maxOutputTokens: 3000 }
     );
 
     ctx.trace.addStep({
       type: 'adjudication',
-      description: 'Judge produced recommendation with confidence',
+      description: traceLabel,
       output: result,
     });
 
-    return { recommendation: result.recommendation, rationale: result.rationale, confidence: result.confidence };
+    return {
+      recommendation: result.recommendation,
+      rationale: result.rationale,
+      confidence: result.confidence,
+    };
   },
 };

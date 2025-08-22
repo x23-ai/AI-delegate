@@ -55,10 +55,20 @@ export interface PlanningOutput {
   confidence?: number;
 }
 
+export interface FactCheckSummary {
+  total: number;
+  supported: number;
+  contested: number;
+  unknown: number;
+  avgConfidence?: number; // 0..1
+}
+
 export interface FactCheckOutput {
   claims: Array<{ claim: string; status: 'supported' | 'contested' | 'unknown'; citations: string[]; confidence?: number }>;
   keyEvidence: string[]; // URIs or summarized snippets
   overallConfidence?: number; // 0..1 aggregate confidence
+  arithmeticSummary?: FactCheckSummary;
+  assumptionsSummary?: FactCheckSummary;
 }
 
 export interface ReasoningOutput {
