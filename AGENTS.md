@@ -7,6 +7,17 @@
 - `merkle/`: Node helpers for Merkle roots/proofs (`merkle.js`, `index.js`).
 - Env files: `contracts/.env`, `agent-delegate/.env`, `frontend/.env.local` (never commit secrets).
 
+### Agent Prompts & Tools (editing guidelines)
+- Prompts in agents: Each agent file defines editable prompt constants at the top of the file (e.g., `PLANNER_PROMPT_SYSTEM_SUFFIX`, `REASONER_PROMPT_SYSTEM_SUFFIX`, etc.). Edit these to adjust behavior.
+- Tool prompts/schemas: Centralized under `agent-delegate/src/tools/definitions.ts`:
+  - `SEARCH_TOOL_SELECTOR_*` for selecting between `keyword`/`vector`/`hybrid`/`officialHybrid` search tools.
+  - `SEED_SEARCH_*` to derive a concise, search-optimized seed query.
+  - `RAW_POSTS_DECISION_*` to decide when to fetch raw forum posts for added context.
+- x23 API client: `agent-delegate/src/tools/x23.ts` maps API responses to compact `DocChunk` structures (title, uri, snippet/tldr/digest, source, timestamps, score). Only relevant fields per the `agent-delegate/x23ai API spec.yaml` are surfaced.
+- Separation of tools:
+  - Search tools return digests/snippets: `keyword`, `vector`, `hybrid`, `officialHybrid` (answer + citations).
+  - `rawPosts` is a separate tool to fetch full forum thread content when more context is needed for a discussion item.
+
 ## Build, Test, and Dev
 - Contracts:
   - Build: `cd contracts && forge build`
@@ -40,3 +51,8 @@
 ## Security & Configuration
 - Never commit private keys or RPC secrets. Use the provided `.env` files and `source .env` when working with Foundry.
 - Verify end-to-end locally: deploy with Foundry, use the agent to submit a vote, then confirm proof verification in the frontend.
+
+### Debugging & Logs
+- Set `DEBUG=1` to log raw LLM JSON/text and raw x23 API JSON.
+- LLM calls log token counts with clear labels (schema name and operation) at info level.
+- x23 tool methods log their returned objects at info level with tool-specific labels for quick inspection.

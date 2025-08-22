@@ -2,6 +2,27 @@
 
 This package orchestrates multi‑agent evaluation of governance proposals (planner → fact checker → reasoner → devil’s advocate → judge) with auditable traces and x23.ai data tools.
 
+## Prompts and Tool Definitions
+
+- Agent prompts: editable constants live at the top of each agent file:
+  - Planner: `PLANNER_PROMPT_SYSTEM_SUFFIX` (src/agents/planner.ts)
+  - Reasoner: `REASONER_PROMPT_SYSTEM_SUFFIX` (src/agents/reasoner.ts)
+  - Devil’s Advocate: `DEVILS_ADVOCATE_PROMPT_SYSTEM_SUFFIX` (src/agents/devilsAdvocate.ts)
+  - Judge: `JUDGE_PROMPT_SYSTEM_SUFFIX` (src/agents/judge.ts)
+  - Conductor QA/scorers: `CONDUCTOR_*_PROMPT` (src/agents/conductor.ts)
+  - Fact Checker: `ASSUMPTION_EXTRACT_SYSTEM_SUFFIX`, `ARITHMETIC_EXTRACT_SYSTEM_SUFFIX`, `CLAIM_CLASSIFY_SYSTEM_SUFFIX` (src/agents/factChecker.ts)
+
+- Tool prompts/schemas (central): `src/tools/definitions.ts`
+  - `SEARCH_TOOL_SELECTOR_SYSTEM_PROMPT` + `SEARCH_TOOL_SELECTOR_SCHEMA` – pick search tool: `keyword`, `vector`, `hybrid`, `officialHybrid`.
+  - `SEED_SEARCH_SYSTEM_PROMPT` + `SEED_SEARCH_SCHEMA` – produce a concise, search-optimized seed query.
+  - `RAW_POSTS_DECISION_PROMPT` + `RAW_POSTS_DECISION_SCHEMA` – decide if raw discussion posts are needed for added context.
+
+- x23 client mapping: `src/tools/x23.ts`
+  - Maps API responses to compact `DocChunk` objects using only relevant fields per `agent-delegate/x23ai API spec.yaml`:
+    - `id`, `title`, `uri` (`appUrl`/`sourceUrl`), `snippet` (`tldr`/`digest`/`headline`), `source` (`type`/`protocol`), `publishedAt`, `score`.
+  - Search tools return digests/snippets; `officialHybridAnswer` returns `{ answer, citations }`.
+  - `rawPosts` is a separate endpoint to fetch full forum thread content when necessary.
+
 ## Environment Variables
 
 Required for normal operation:
@@ -37,6 +58,8 @@ On‑chain (not required initially):
 
 - Reasoning models like `gpt-5-mini` do not support `temperature`; the client omits it automatically.
 - Traces are recorded via `TraceBuilder` and can be published/hashed later.
+- LLM logging: token counts per call at info level with clear labels (operation + schema). With `DEBUG=1`, raw JSON/text and schemas are printed.
+- x23 logging: raw API JSON is printed when `DEBUG=1`. Each x23 tool method also logs the mapped return object at info level with a clear method label.
 - Arithmetic checks: the fact checker evaluates simple expressions and common finance terms:
   - k/M/B, million/billion/thousand, commas, currency `$`
   - `% of` and `bps` (basis points)
