@@ -38,6 +38,40 @@ const ARITHMETIC_CONFIRM_SYSTEM_SUFFIX = [
 
 type ClaimStatus = 'supported' | 'contested' | 'unknown';
 
+// Heuristic filter: detect future/predictive phrasing that is not presently verifiable
+function isPredictiveClaim(text: string): boolean {
+  const t = (text || '').toLowerCase();
+  // Quick exits for performance
+  if (!t) return false;
+  // Patterns indicating future actions or predictions
+  const patterns: RegExp[] = [
+    /\bwill\b/i,
+    /\bwould\b/i,
+    /\bshall\b/i,
+    /\bgoing to\b/i,
+    /\bplan(?:s|ned)? to\b/i,
+    /\baim(?:s|ed)? to\b/i,
+    /\bintend(?:s|ed)? to\b/i,
+    /\bexpect(?:s|ed)? to\b/i,
+    /\btarget(?:s|ed)? to\b/i,
+    /\bproject(?:s|ed)? to\b/i,
+    /\bforecast(?:s|ed)? to\b/i,
+    /\blikely to\b/i,
+    /\bsoon\b/i,
+    /\bETA\b/i,
+    /\broadmap\b/i,
+    /\bafter (?:launch|deployment|upgrade)\b/i,
+    /\bnext (?:quarter|month|year|week)\b/i,
+    /\bin \d+\s*(?:days?|weeks?|months?|years?)\b/i,
+    /\bby (?:q[1-4]\s*\d{4}|q[1-4]|\d{4})\b/i,
+    // Normative predictive phrasing like "should increase", "should improve"
+    /\bshould (?:increase|decrease|improve|reduce|enhance|boost|yield|result)\b/i,
+    // Conditional predictions
+    /\bif [^\n]+ then [^\n]+ will\b/i,
+  ];
+  return patterns.some((re) => re.test(t));
+}
+
 export const FactSleuth: FactCheckerAgent = {
   kind: 'factChecker',
   codename: 'Veritas Sleuth',
@@ -161,6 +195,27 @@ export const FactSleuth: FactCheckerAgent = {
         .slice(0, 5)
         .map((d) => ({ source: d.source || 'search', uri: d.uri || '' })),
     });
+
+    // Filter out future/predictive (non-verifiable-now) assumptions
+    const rawAssumptions = Array.isArray(assumptionPack.assumptions)
+      ? assumptionPack.assumptions
+      : [];
+    const keptAssumptions = rawAssumptions.filter((a) => !isPredictiveClaim(a?.claim || ''));
+    const removed = rawAssumptions.filter((a) => !keptAssumptions.includes(a));
+    if (removed.length > 0) {
+      log.info(
+        `FactChecker: filtered ${removed.length} predictive/non-verifiable assumptions; keeping ${keptAssumptions.length}`
+      );
+      ctx.trace.addStep({
+        type: 'analysis',
+        description: 'Filtered predictive/non-verifiable assumptions',
+        input: { totalExtracted: rawAssumptions.length },
+        output: {
+          kept: keptAssumptions.length,
+          removedSample: removed.slice(0, 6).map((a) => a.claim),
+        },
+      });
+    }
 
     // Evidence acquisition helpers moved to shared toolkit (evidence.ts)
 
@@ -358,7 +413,7 @@ export const FactSleuth: FactCheckerAgent = {
     const minCitations = Number(process.env.FACT_MIN_CITATIONS || 1);
     const minConfidence = Number(process.env.FACT_MIN_CONFIDENCE || 0.6);
     const maxChecks = Number(process.env.FACT_MAX_CHECKS || 0);
-    const allAssumptions = assumptionPack.assumptions || [];
+    const allAssumptions = keptAssumptions || [];
     const selectedAssumptions = maxChecks > 0 ? allAssumptions.slice(0, maxChecks) : allAssumptions;
     log.info(`FactChecker: evaluating ${selectedAssumptions.length} assumptions`);
     const totalFacts = selectedAssumptions.length;

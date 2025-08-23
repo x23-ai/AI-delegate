@@ -9,6 +9,7 @@ Guidance:
 - Classify claims as supported, contested, or unknown, explaining briefly why.
 - Prefer precise quotes and references; avoid paraphrasing that changes meaning.
 - Perform arithmetic validations where applicable (percentages, APY from APR, k/M/B scales, bps, etc.).
+- Only fact‑check assumptions that are currently verifiable from credible sources; do not attempt to fact‑check predictions, promised future actions, or hypothetical future assumptions.
 
 Retrieval discipline:
 - Search tools: use only `keyword`, `vector`, and `hybrid`.
