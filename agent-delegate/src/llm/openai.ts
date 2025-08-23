@@ -1,5 +1,6 @@
 import type { LLMClient, LLMGenerateOptions, LLMExtractOptions } from './types.js';
 import { log, sleep, colors } from '../utils/logger.js';
+import { metrics } from '../utils/metrics.js';
 
 function getDebugLevel(): number {
   const d = String(process.env.DEBUG || '').trim().toLowerCase();
@@ -26,9 +27,21 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
 
   const isReasoningModel = /(^gpt5|^gpt-5)/i.test(model) || /gpt-5-mini/i.test(model);
 
-  async function callResponses(body: any): Promise<any> {
+  function resolveModelOverride(opts?: LLMGenerateOptions | LLMExtractOptions): string | undefined {
+    const diff = (opts as any)?.difficulty as 'easy' | 'normal' | 'hard' | undefined;
+    const override = (opts as any)?.model as string | undefined;
+    if (override) return override;
+    if (!diff) return undefined;
+    const M_EASY = process.env.OPENAI_MODEL_EASY || 'gpt-5-nano';
+    const M_NORMAL = process.env.OPENAI_MODEL_NORMAL || 'gpt-5-mini';
+    const M_HARD = process.env.OPENAI_MODEL_HARD || 'gpt-5';
+    return diff === 'easy' ? M_EASY : diff === 'hard' ? M_HARD : M_NORMAL;
+  }
+
+  async function callResponses(body: any, modelOverride?: string): Promise<any> {
     if (!apiKey) throw new Error('OPENAI_API_KEY is required for OpenAI provider');
-    const spinner = log.spinner(`LLM ${model} responses`);
+    const mdl = modelOverride || model;
+    const spinner = log.spinner(`LLM ${mdl} responses`);
     const start = Date.now();
     const res = await fetch(`${baseUrl}/responses`, {
       method: 'POST',
@@ -36,7 +49,7 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
         'content-type': 'application/json',
         authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({ model, ...body }),
+      body: JSON.stringify({ model: mdl, ...body }),
     });
     const ms = Date.now() - start;
     if (!res.ok) {
@@ -77,7 +90,8 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
         est = true;
       }
       if (typeof totalTokens !== 'number') totalTokens = (inputTokens || 0) + (outputTokens || 0);
-      log.info(`LLM tokens ${model} ${label}: input=${inputTokens} output=${outputTokens} total=${totalTokens}${est ? ' (est)' : ''}`);
+      log.info(`LLM tokens ${label}: input=${inputTokens} output=${outputTokens} total=${totalTokens}${est ? ' (est)' : ''}`);
+      metrics.recordLLMUsage(inputTokens, outputTokens);
     } catch {}
   }
 
@@ -98,7 +112,7 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
   return {
     async generateText(system: string, prompt: string, opts?: LLMGenerateOptions): Promise<string> {
       const baseMax = opts?.maxOutputTokens ?? 4000;
-      const tempset = !isReasoningModel && typeof opts?.temperature === 'number' ? opts.temperature : undefined;
+      const modelOverride = resolveModelOverride(opts);
       for (let attempt = 1; attempt <= 3; attempt++) {
         const maxTokens = Math.min(Math.floor(baseMax * Math.pow(1.5, attempt - 1)), 16000);
         const body: any = {
@@ -107,12 +121,12 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
             { role: 'user', content: prompt },
           ],
           max_output_tokens: maxTokens,
+          top_p: 1,
         };
-        if (typeof tempset === 'number') body.temperature = tempset;
         log.info(`LLM text generation attempt ${attempt} (max_tokens=${maxTokens}) …`);
         try {
-          const json = await callResponses(body);
-          logTokenUsage('text', json, [system, prompt]);
+          const json = await callResponses(body, modelOverride);
+          logTokenUsage(`text:${modelOverride || model}`, json, [system, prompt]);
           if (DEBUG) {
             try {
               console.log('[DEBUG] LLM raw JSON (generateText):');
@@ -167,7 +181,7 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
         try { log.debug(`LLM schema '${schemaName}'`, strictSchema as any); } catch {}
       }
       const baseMax = opts?.maxOutputTokens ?? 4000;
-      const tempset = !isReasoningModel && typeof opts?.temperature === 'number' ? opts.temperature : undefined;
+      const modelOverride = resolveModelOverride(opts);
       for (let attempt = 1; attempt <= 3; attempt++) {
         const maxTokens = Math.min(Math.floor(baseMax * Math.pow(1.5, attempt - 1)), 16000);
         const body: any = {
@@ -184,12 +198,12 @@ export function createOpenAIClient(config: OpenAIConfig = {}): LLMClient {
             },
           },
           max_output_tokens: maxTokens,
+          top_p: 1,
         } as any;
-        if (typeof tempset === 'number') body.temperature = tempset;
         log.info(`LLM step '${schemaName}' attempt ${attempt} (max_tokens=${maxTokens}) …`);
         try {
-          const json = await callResponses(body);
-          logTokenUsage(`step:${schemaName}`, json, [system, prompt], strictSchema);
+          const json = await callResponses(body, modelOverride);
+          logTokenUsage(`step:${schemaName}:${modelOverride || model}`, json, [system, prompt], strictSchema);
           if (DEBUG_LEVEL >= 1) {
             try { log.debug('LLM raw JSON', json); } catch {}
           }

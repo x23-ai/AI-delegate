@@ -7,6 +7,7 @@ import { findEvidenceForClaim } from '../tools/evidence.js';
 import { applyPromptTemplate } from '../utils/prompt.js';
 import { AVAILABLE_PROTOCOLS, DISCUSSION_URL } from '../utils/x23Config.js';
 import { SchemaNames, TraceLabels } from './constants.js';
+import { log } from '../utils/logger.js';
 
 // LLM prompts (editable)
 const REASONER_PROMPT_SYSTEM_SUFFIX = [
@@ -14,16 +15,16 @@ const REASONER_PROMPT_SYSTEM_SUFFIX = [
   'Begin the argument with a short section exactly titled "Purpose Breakdown:" that lists stakeholder purposes as concise bullets for: proposers, voters, protocol stewards, and affected users. Reflect the proposal context, not generic platitudes.',
   'Question the overarching goal/purpose of the proposal and relate stakeholder purposes to that goal (alignments/tensions).',
   'When evidence is provided, use it to inform premises and highlight gaps. Use inline citation markers like (R1), (R2) corresponding to numbered evidence under each premise in the provided evidenceDigest. Be explicit about uncertainties.',
+  'Focus narrowly on the three aspects provided in the input under "aspects"; make premises and discussion primarily about these aspects.',
   'Output JSON must include a numeric confidence in [0,1].',
 ].join('\n');
 
-// Decision prompt to determine whether another search+refine iteration is warranted
-const REASONER_ITER_DECISION_SUFFIX = [
-  'You decide whether to run another search+refine iteration.',
-  '- Continue if any of the following hold: (a) open uncertainties remain; (b) conflicting premises detected; (c) missing citations for critical premises; (d) official/policy guidance likely exists but not consulted.',
-  '- Stop if returns are diminishing, evidence is sufficient for the decision context, or further search is unlikely to change conclusions.',
-  'Checklist: openUncertainties?, conflictingPremises?, missingCitations?, likelyOfficialGuidance?.',
-  'Return JSON { continue: boolean, rationale: string } only.',
+// Decide whether collected evidence is sufficient to proceed to reasoning
+const REASONER_EVIDENCE_SUFFICIENCY_SUFFIX = [
+  'You decide whether collected evidence is sufficient to form a well-grounded recommendation.',
+  '- Consider the provided aspects/premises, the number and diversity of citations, and whether official/policy guidance has been consulted when relevant.',
+  '- Stop searching if returns are diminishing and coverage seems adequate for the decision context; otherwise suggest what is missing.',
+  'Return JSON { enough: boolean, rationale: string, missing?: string[] } only.',
 ].join('\n');
 
 // Suggest information needs and hints to improve retrieval for a premise
@@ -32,6 +33,13 @@ const REASONER_INFO_NEEDS_SUFFIX = [
   '- Output short hints (3-8 words) that include entities, identifiers, policy names, or document types to search.',
   '- If specific protocols or item types are indicated, include them as lists.',
   'Return JSON { hints: string[], protocols?: string[], itemTypes?: string[] } only.',
+].join('\n');
+
+// Identify the top 3 aspects to focus on
+const REASONER_ASPECTS_SUFFIX = [
+  'Identify the top 3 most important aspects of this proposal to assess.',
+  '- Think in terms of decision-impacting dimensions (e.g., feasibility, compliance, expected outcomes, risk).',
+  '- Return JSON { aspects: string[3] } with concise, non-overlapping aspect labels.',
 ].join('\n');
 
 export const CogitoSage: ReasonerAgent = {
@@ -56,11 +64,45 @@ export const CogitoSage: ReasonerAgent = {
       planning,
       facts,
     };
+    // Step numbering for trace/log readability
+    let stepNum = 1;
+
+    // Identify top 3 aspects to focus the reasoning
+    let aspects: string[] = [];
+    try {
+      log.info('Reasoner: identifying top 3 aspects to focus on');
+      const aspectsOut = await llm.extractJSON<{ aspects: string[] }>(
+        `${role}\n\n${REASONER_ASPECTS_SUFFIX}`,
+        JSON.stringify({
+          proposal: input.proposal,
+          planning: input.planning,
+          factsSummary: {
+            assumptions: Array.isArray(facts?.claims)
+              ? facts.claims.slice(0, 8).map((c: any) => c.claim)
+              : [],
+          },
+        }).slice(0, 3000),
+        {
+          type: 'object',
+          properties: { aspects: { type: 'array', items: { type: 'string' } } },
+          required: ['aspects'],
+        },
+        { schemaName: 'reasonerAspects', maxOutputTokens: 1500, difficulty: 'easy' }
+      );
+      aspects = (aspectsOut.aspects || []).slice(0, 3);
+    } catch {}
+    ctx.trace.addStep({
+      type: 'reasoning',
+      description: `[R${stepNum++}] Identified top aspects`,
+      output: { aspects },
+    });
+
     const schemaName = SchemaNames.reasoning();
     const traceLabel = TraceLabels.reasoning();
+    log.info('Reasoner: drafting initial argument focused on key aspects');
     const out = await llm.extractJSON<ReasoningOutput>(
       `${role}\n\n${REASONER_PROMPT_SYSTEM_SUFFIX}`,
-      JSON.stringify(input).slice(0, 6000),
+      JSON.stringify({ ...input, aspects }).slice(0, 6000),
       {
         type: 'object',
         properties: {
@@ -71,7 +113,7 @@ export const CogitoSage: ReasonerAgent = {
         },
         required: ['argument', 'premises', 'confidence'],
       },
-      { schemaName, maxOutputTokens: 6000 }
+      { schemaName, maxOutputTokens: 6000, difficulty: 'normal' }
     );
     let current = {
       argument: out.argument || '',
@@ -82,22 +124,25 @@ export const CogitoSage: ReasonerAgent = {
 
     ctx.trace.addStep({
       type: 'reasoning',
-      description: traceLabel,
+      description: `[R${stepNum++}] ${traceLabel}`,
       output: { premises: current.premises, outline: current.argument },
     });
 
-    // Iterative search + refine loop for deeper context
+    // Stage 1: evidence collection loop
     const maxPremises = Math.max(0, Number(process.env.REASONER_PREMISE_EVIDENCE_MAX || '3'));
     const maxIters = Math.max(1, Number(process.env.REASONER_REFINE_ITERS || '2'));
     const attemptsByPremise = new Map<string, any[]>();
+    const aggEvidenceByPremise = new Map<
+      string,
+      { title?: string; uri?: string; snippet?: string }[]
+    >();
     for (let iter = 0; iter < maxIters; iter++) {
-      // Evidence lookup for top premises in this iteration
+      log.info(`Reasoner: evidence iteration ${iter + 1} — collecting context for top premises`);
       const evidenceByPremise: Array<{
         premise: string;
         docs: { title?: string; uri?: string; snippet?: string }[];
       }> = [];
       const searchAttempts: any[] = [];
-      const seenUris = new Set<string>();
       const premises = current.premises || [];
       const targets = premises.slice(0, Math.min(maxPremises, premises.length));
       const conc = Math.max(1, Number(process.env.REASONER_EVIDENCE_CONCURRENCY || '2'));
@@ -127,7 +172,7 @@ export const CogitoSage: ReasonerAgent = {
                 },
                 required: ['hints'],
               },
-              { schemaName: 'reasonerInfoNeeds', maxOutputTokens: 2500 }
+              { schemaName: 'reasonerInfoNeeds', maxOutputTokens: 2500, difficulty: 'normal' }
             );
             infoNeeds[premise] = Array.isArray(needs?.hints) ? needs.hints : [];
           })
@@ -153,7 +198,7 @@ export const CogitoSage: ReasonerAgent = {
             role,
             premise,
             baseHints.concat(extraHints).slice(0, 12),
-            { seenUris, priorAttempts: prior }
+            { priorAttempts: prior }
           );
           if (Array.isArray((ev as any).attempts)) searchAttempts.push(...(ev as any).attempts);
           if (!attemptsByPremise.has(premise)) attemptsByPremise.set(premise, []);
@@ -162,6 +207,10 @@ export const CogitoSage: ReasonerAgent = {
             .slice(0, 5)
             .map((d) => ({ title: d.title, uri: d.uri, snippet: d.snippet }));
           evidenceByPremise[i] = { premise, docs };
+          const prev = aggEvidenceByPremise.get(premise) || [];
+          const prevUris = new Set(prev.map((d) => d.uri || ''));
+          const merged = prev.concat(docs.filter((d) => d.uri && !prevUris.has(d.uri)));
+          aggEvidenceByPremise.set(premise, merged);
           ctx.trace.addStep({
             type: 'reasoning',
             description: `Collected evidence for premise ${i + 1} (iter ${iter + 1})`,
@@ -174,97 +223,111 @@ export const CogitoSage: ReasonerAgent = {
       await Promise.allSettled(
         Array.from({ length: Math.min(conc, targets.length) }, (_, k) => worker(k))
       );
+      // Log which API calls were made with their queries and result counts
+      for (const att of searchAttempts) {
+        const q = typeof att.query === 'string' ? att.query : '';
+        const tool = att.tool || 'unknown';
+        const res = typeof att.resultCount === 'number' ? att.resultCount : '?';
+        log.info(`Reasoner API call: tool=${tool} query="${q}" results=${res}`);
+      }
 
-      const evidenceDigest = evidenceByPremise
-        .map((e, idx) => {
-          const lines = e.docs
+      // Build aggregated evidence digest so far and decide if enough
+      const evidenceDigest = Array.from(aggEvidenceByPremise.entries())
+        .map(([premise, docs], idx) => {
+          const lines = (docs || [])
             .slice(0, 3)
             .map(
               (d, j) => ` [${j + 1}] ${d.title || d.uri} :: ${d.uri || ''} :: ${d.snippet || ''}`
             )
             .join('\n');
-          return `Premise ${idx + 1}: ${e.premise}\n${lines}`;
+          return `Premise ${idx + 1}: ${premise}\n${lines}`;
         })
         .join('\n');
 
-      const refined = await llm.extractJSON<ReasoningOutput>(
-        `${role}\n\n${REASONER_PROMPT_SYSTEM_SUFFIX}`,
-        JSON.stringify({ ...input, draft: current, evidenceDigest, iteration: iter + 1 }),
-        {
-          type: 'object',
-          properties: {
-            argument: { type: 'string' },
-            premises: { type: 'array', items: { type: 'string' } },
-            uncertainties: { type: 'array', items: { type: 'string' } },
-            confidence: { type: 'number' },
-          },
-          required: ['argument', 'premises', 'confidence'],
-        },
-        { schemaName: 'reasoningOutRefined', maxOutputTokens: 10000 }
-      );
-
-      const uniqueCitations = Array.from(
-        new Set(evidenceByPremise.flatMap((e) => e.docs.map((d) => d.uri || '')).filter(Boolean))
-      );
-      ctx.trace.addStep({
-        type: 'reasoning',
-        description: `Refined reasoning with evidence context (iter ${iter + 1})`,
-        input: {
-          evidenceCount: evidenceByPremise.reduce((n, e) => n + e.docs.length, 0),
-          searchAttempts: searchAttempts.length,
-        },
-        output: { confidence: refined.confidence ?? null, uniqueCitations: uniqueCitations.length },
-        references: uniqueCitations.slice(0, 8).map((u) => ({ source: 'search', uri: u })),
-      });
-
-      // Convergence/decision check
-      const sameArgument = (refined.argument || '').trim() === (current.argument || '').trim();
-      const samePremises =
-        JSON.stringify(refined.premises || []) === JSON.stringify(current.premises || []);
-      const sameUncertainties =
-        JSON.stringify(refined.uncertainties || []) === JSON.stringify(current.uncertainties || []);
-      let shouldContinue = !sameArgument || !samePremises || !sameUncertainties;
+      let shouldContinue = iter < maxIters - 1;
       try {
-        const decision = await llm.extractJSON<{ continue: boolean; rationale?: string }>(
-          `${role}\n\n${REASONER_ITER_DECISION_SUFFIX}`,
+        const suff = await llm.extractJSON<{
+          enough: boolean;
+          rationale?: string;
+          missing?: string[];
+        }>(
+          `${role}\n\n${REASONER_EVIDENCE_SUFFICIENCY_SUFFIX}`,
           JSON.stringify({
             iteration: iter + 1,
             maxIters,
-            current: current,
-            refined: {
-              argument: refined.argument,
-              premises: refined.premises,
-              uncertainties: refined.uncertainties,
-              confidence: refined.confidence,
-            },
-          }).slice(0, 5000),
+            aspects,
+            premises: targets,
+            evidenceDigest,
+          }).slice(0, 6000),
           {
             type: 'object',
-            properties: { continue: { type: 'boolean' }, rationale: { type: 'string' } },
-            required: ['continue'],
+            properties: {
+              enough: { type: 'boolean' },
+              rationale: { type: 'string' },
+              missing: { type: 'array', items: { type: 'string' } },
+            },
+            required: ['enough'],
           },
-          { schemaName: 'reasonerIterDecision', maxOutputTokens: 2000 }
+          { schemaName: 'reasonerEvidenceSufficiency', maxOutputTokens: 2000, difficulty: 'normal' }
         );
-        // Combine structural convergence with model decision; both must suggest continuing to do another round
-        shouldContinue = shouldContinue && !!decision?.continue;
+        shouldContinue = !suff?.enough && shouldContinue;
         ctx.trace.addStep({
           type: 'reasoning',
-          description: `Iteration decision (iter ${iter + 1})`,
-          input: { sameArgument, samePremises, sameUncertainties },
-          output: { continue: !!decision?.continue, rationale: decision?.rationale || null },
+          description: `[R${stepNum++}] Evidence sufficiency decision (iter ${iter + 1})`,
+          output: {
+            continue: shouldContinue,
+            enough: !!suff?.enough,
+            rationale: suff?.rationale || null,
+            missing: (suff?.missing || []).slice(0, 3),
+          },
         });
-      } catch {
-        // if decision fails, fallback to structural convergence only
-      }
-      current = {
-        argument: refined.argument || current.argument,
-        premises: refined.premises && refined.premises.length ? refined.premises : current.premises,
-        uncertainties: refined.uncertainties || current.uncertainties,
-        confidence: refined.confidence ?? current.confidence,
-      };
+      } catch {}
       if (!shouldContinue) break;
     }
 
-    return current;
+    // Stage 2: final reasoning over collected evidence
+    const evidenceDigestFinal = Array.from(aggEvidenceByPremise.entries())
+      .map(([premise, docs], idx) => {
+        const lines = (docs || [])
+          .slice(0, 4)
+          .map((d, j) => ` [${j + 1}] ${d.title || d.uri} :: ${d.uri || ''} :: ${d.snippet || ''}`)
+          .join('\n');
+        return `Premise ${idx + 1}: ${premise}\n${lines}`;
+      })
+      .join('\n');
+
+    const finalOut = await llm.extractJSON<ReasoningOutput>(
+      `${role}\n\n${REASONER_PROMPT_SYSTEM_SUFFIX}`,
+      JSON.stringify({ ...input, aspects, evidenceDigest: evidenceDigestFinal }).slice(0, 10000),
+      {
+        type: 'object',
+        properties: {
+          argument: { type: 'string' },
+          premises: { type: 'array', items: { type: 'string' } },
+          uncertainties: { type: 'array', items: { type: 'string' } },
+          confidence: { type: 'number' },
+        },
+        required: ['argument', 'premises', 'confidence'],
+      },
+      { schemaName: 'reasoningOutFinal', maxOutputTokens: 15000, difficulty: 'hard' }
+    );
+
+    ctx.trace.addStep({
+      type: 'reasoning',
+      description: `[R${stepNum++}] Final reasoning from collected evidence`,
+      output: {
+        premises: finalOut.premises,
+        outline: finalOut.argument,
+        confidence: finalOut.confidence,
+      },
+    });
+
+    return {
+      argument: finalOut.argument || current.argument,
+      premises:
+        finalOut.premises && finalOut.premises.length ? finalOut.premises : current.premises,
+      uncertainties: finalOut.uncertainties || current.uncertainties,
+      confidence: finalOut.confidence ?? current.confidence,
+    } as ReasoningOutput;
   },
 };

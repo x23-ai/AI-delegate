@@ -10,7 +10,7 @@ export function createLLM(provider?: LLMProvider): LLMClient {
     async generateText(system: string, prompt: string) {
       return `[stub llm] ${prompt.slice(0, 140)}`;
     },
-    async extractJSON<T>(system: string, prompt: string, _schema: object) {
+    async extractJSON<T>(system: string, prompt: string, _schema: object, _opts?: any) {
       const fake: any = { satisfied: true, reason: 'stub' };
       return fake as T;
     },
@@ -18,4 +18,3 @@ export function createLLM(provider?: LLMProvider): LLMClient {
 }
 
 export type { LLMClient } from './types.js';
-

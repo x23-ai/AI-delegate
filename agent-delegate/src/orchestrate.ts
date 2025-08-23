@@ -10,6 +10,7 @@ import { validateConfig } from './utils/configValidate.js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { log } from './utils/logger.js';
+import { metrics } from './utils/metrics.js';
 
 async function main() {
   // Validate configuration early for clearer errors
@@ -30,9 +31,8 @@ async function main() {
     llm,
   };
 
-  log.info(
-    `Orchestrator: starting run for proposal ${proposalId} (${proposal.title || 'untitled'})`
-  );
+  log.banner('ORCHESTRATION START', `Proposal ${proposalId}: ${proposal.title || 'untitled'}`);
+  log.info('Orchestrator: initializing agents and tools');
   const result = await runConductor(ctx, llm);
   log.info('Orchestrator: run complete');
   console.log('Conductor pipeline result:', JSON.stringify(result, null, 2));
@@ -55,6 +55,18 @@ async function main() {
     `Judge: ${result.adjudication.recommendation.toUpperCase()} (confidence: ${result.adjudication.confidence ?? 'n/a'})`,
   ];
   console.log(summaryLines.join('\n'));
+
+  // Metrics summary
+  try {
+    const m = metrics.summary();
+    const metricsLines = [
+      '--- Usage Metrics ---',
+      `LLM tokens: input=${m.llmInputTokens} output=${m.llmOutputTokens} (calls=${m.llmCalls})`,
+      `x23 API calls: ${m.x23Calls}`,
+      `Docs/sources evaluated: ${m.docsEvaluated}`,
+    ];
+    console.log(metricsLines.join('\n'));
+  } catch {}
 
   // Optional: write summary to JSON when --summary-json path is provided
   const args = getCliArgs();

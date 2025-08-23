@@ -84,6 +84,13 @@ export const log = {
       },
     };
   },
+  banner(title: string, subtitle?: string) {
+    const colorize = getColorFns();
+    const line = colorize.magenta('══════════════════════════════════════════════════════════════════════════════');
+    const t = colorize.bold(colorize.blue(title.toUpperCase()));
+    const sub = subtitle ? `\n${colorize.dim(subtitle)}` : '';
+    console.log(`\n${line}\n${t}${sub}\n${line}`);
+  },
 };
 
 export function sleep(ms: number): Promise<void> {

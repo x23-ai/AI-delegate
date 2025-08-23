@@ -1,6 +1,8 @@
 export interface LLMGenerateOptions {
   temperature?: number;
   maxOutputTokens?: number;
+  difficulty?: 'easy' | 'normal' | 'hard';
+  model?: string;
 }
 
 export interface LLMExtractOptions extends LLMGenerateOptions {
@@ -14,4 +16,3 @@ export interface LLMClient {
 }
 
 export type LLMProvider = 'openai' | 'stub';
-

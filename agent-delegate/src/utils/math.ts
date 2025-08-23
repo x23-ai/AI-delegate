@@ -97,9 +97,22 @@ function rewriteAprToApy(expr: string): string {
   });
 }
 
+function normalizeAsciiMath(s: string): string {
+  if (!s) return '';
+  // Normalize common Unicode math operators and punctuation to ASCII
+  return String(s)
+    .replace(/[\u2212\u2012-\u2015\u2013\u2014]/g, '-') // minus and dashes → '-'
+    .replace(/[\u00D7\u2715\u2716\u22C5\u2219\u00B7]/g, '*') // multiplication signs/center dot → '*'
+    .replace(/[\u00F7\u2044\u2215]/g, '/') // division signs/fraction slash → '/'
+    .replace(/[\uFF08]/g, '(') // fullwidth (
+    .replace(/[\uFF09]/g, ')') // fullwidth )
+    .replace(/[\u2009\u202F\u200A\u200B\u2005\u00A0]/g, ' ') // thin/nb spaces → space
+    .replace(/[^\x00-\x7F]/g, (ch) => ch); // leave other unicode as-is
+}
+
 export function evaluateExpression(input: string): number {
   // Basic normalization
-  let expr = input;
+  let expr = normalizeAsciiMath(input);
   expr = rewriteAprToApy(expr);
   expr = rewriteWordScales(expr);
   expr = rewriteBps(expr);
@@ -167,3 +180,5 @@ export function nearlyEqual(a: number, b: number, relTol = 1e-6, absTol = 1e-6):
   const diff = Math.abs(a - b);
   return diff <= Math.max(relTol * Math.max(Math.abs(a), Math.abs(b)), absTol);
 }
+
+export { normalizeAsciiMath };

@@ -65,7 +65,7 @@ export async function selectSearchTool(
     sys(rolePrompt, SEARCH_TOOL_SELECTOR_SYSTEM_PROMPT),
     body,
     SEARCH_TOOL_SELECTOR_SCHEMA as any,
-    { schemaName: 'searchToolPlan', maxOutputTokens: 2500 }
+    { schemaName: 'searchToolPlan', maxOutputTokens: 2500, difficulty: 'normal' }
   );
   // Optional query rewrite to concise keyword form
   const vRewrite = String(process.env.FACT_ENABLE_QUERY_REWRITE || '1').toLowerCase();
@@ -76,7 +76,7 @@ export async function selectSearchTool(
         sys(rolePrompt, QUERY_REWRITE_SYSTEM_PROMPT),
         `Claim: ${claimOrQuery}\nOriginalQuery: ${plan.query || ''}\nTitle: ${ctx.proposal.title || ''}`,
         QUERY_REWRITE_SCHEMA as any,
-        { schemaName: 'queryRewrite', maxOutputTokens: 2000 }
+        { schemaName: 'queryRewrite', maxOutputTokens: 2000, difficulty: 'normal' }
       );
       const before = (plan.query || '').trim();
       const after = (rewrite?.query || '').trim();
@@ -217,7 +217,7 @@ export async function maybeExpandWithRawPosts(
       sys(rolePrompt, RAW_POSTS_DECISION_PROMPT),
       `Claim: ${claim}\nDoc: ${JSON.stringify(top)}`,
       RAW_POSTS_DECISION_SCHEMA as any,
-      { schemaName: 'rawPostsDecision', maxOutputTokens: 6000 }
+      { schemaName: 'rawPostsDecision', maxOutputTokens: 6000, difficulty: 'normal' }
     );
     if (!decision.useRawPosts) return undefined;
     const discussionUrl = DISCUSSION_URL;
@@ -259,7 +259,7 @@ export async function maybeExpandWithOfficialDetail(
       sys(rolePrompt, OFFICIAL_DETAIL_DECISION_PROMPT),
       `Claim: ${claim}\nOfficialCitations: ${JSON.stringify(docs.filter((d) => (d.source || '').toLowerCase() === 'officialdoc').slice(0, 3))}`,
       OFFICIAL_DETAIL_DECISION_SCHEMA as any,
-      { schemaName: 'officialDetailDecision', maxOutputTokens: 4000 }
+      { schemaName: 'officialDetailDecision', maxOutputTokens: 4000, difficulty: 'normal' }
     );
     if (!decision.useOfficialDetail) return undefined;
     const q = (decision.question || claim).slice(0, 256);
@@ -335,7 +335,7 @@ export async function findEvidenceForClaim(
         sys(rolePrompt, OFFICIAL_FIRST_DECISION_PROMPT),
         `Claim: ${claim}\nHints: ${JSON.stringify(hints || [])}\nTitle: ${ctx.proposal.title || ''}\nDescription: ${String(ctx.proposal.description || '').slice(0, 400)}`,
         OFFICIAL_FIRST_DECISION_SCHEMA as any,
-        { schemaName: 'officialFirstDecision', maxOutputTokens: 1000 }
+        { schemaName: 'officialFirstDecision', maxOutputTokens: 1000, difficulty: 'normal' }
       );
       preferOfficial = !!dec?.preferOfficialFirst;
     } catch {
@@ -352,7 +352,7 @@ export async function findEvidenceForClaim(
           sys(rolePrompt, QUERY_REWRITE_SYSTEM_PROMPT),
           `Claim: ${claim}\nTitle: ${ctx.proposal.title || ''}`,
           QUERY_REWRITE_SCHEMA as any,
-          { schemaName: 'queryRewriteOfficialFirst', maxOutputTokens: 2000 }
+          { schemaName: 'queryRewriteOfficialFirst', maxOutputTokens: 2000, difficulty: 'normal' }
         );
         const before = q.trim();
         const after = (rewrite?.query || '').trim();
@@ -493,7 +493,7 @@ export async function planSeedSearch(
     sys(SEED_SEARCH_SYSTEM_PROMPT),
     `Title: ${ctx.proposal.title}\nDescription: ${ctx.proposal.description}\nPayloadDigest:\n${payload || '(none)'}\n`,
     SEED_SEARCH_SCHEMA as any,
-    { schemaName: 'seedSearchPlan', maxOutputTokens: 2000 }
+    { schemaName: 'seedSearchPlan', maxOutputTokens: 2000, difficulty: 'normal' }
   );
   return seedPlan;
 }

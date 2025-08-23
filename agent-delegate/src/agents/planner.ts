@@ -21,7 +21,10 @@ export const PlannerNavigator: PlannerAgent = {
   async run(ctx): Promise<PlanningOutput> {
     const llm: LLMClient = ctx.llm || createLLM();
     const baseRole = loadRolePrompt(PlannerNavigator.systemPromptPath);
-    const role = applyPromptTemplate(baseRole, { protocols: AVAILABLE_PROTOCOLS.join(', '), forumRoot: DISCUSSION_URL });
+    const role = applyPromptTemplate(baseRole, {
+      protocols: AVAILABLE_PROTOCOLS.join(', '),
+      forumRoot: DISCUSSION_URL,
+    });
     const payloadDigest = (ctx.proposal.payload || [])
       .slice(0, 8)
       .map((p, i) => `P${i + 1}: [${p.type}] ${p.uri || ''}`)
@@ -41,7 +44,7 @@ export const PlannerNavigator: PlannerAgent = {
         },
         required: ['objectives', 'tasks'],
       },
-      { schemaName, maxOutputTokens: 3000 }
+      { schemaName, maxOutputTokens: 4000, difficulty: 'easy' }
     );
     const objectives = plan.objectives || [];
     const tasks = plan.tasks || [];
@@ -50,7 +53,9 @@ export const PlannerNavigator: PlannerAgent = {
     try {
       const seed = await planSeedSearch(ctx, llm, role);
       const seedQuery = (seed?.query || '').trim();
-      const seedProtocols = (seed?.protocols || AVAILABLE_PROTOCOLS).filter((p) => AVAILABLE_PROTOCOLS.includes(p));
+      const seedProtocols = (seed?.protocols || AVAILABLE_PROTOCOLS).filter((p) =>
+        AVAILABLE_PROTOCOLS.includes(p)
+      );
       if (seedQuery) {
         const taskLine = `Seed search corpus: "${seedQuery}" [${seedProtocols.join(', ')}]`;
         if (!tasks.some((t) => t.toLowerCase().includes('seed search'))) tasks.unshift(taskLine);

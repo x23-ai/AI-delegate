@@ -53,6 +53,7 @@ export interface TimelineItem {
 }
 
 import { log, colors } from '../utils/logger.js';
+import { metrics } from '../utils/metrics.js';
 
 function getDebugLevel(): number {
   const d = String(process.env.DEBUG || '').trim().toLowerCase();
@@ -93,6 +94,7 @@ export class X23Client {
     }
     const spinner = log.spinner(`x23 ${method} ${path}`);
     try {
+      metrics.incrementX23Calls();
       const res = await fetch(url, { ...init, headers: { ...headers, ...(init?.headers as any) } });
       const ms = Date.now() - start;
       if (!res.ok) {
@@ -158,6 +160,7 @@ export class X23Client {
     const results = data.result?.results ?? [];
     const pairs = results.map((it) => ({ raw: it, doc: this.mapItemToDocChunk(it) }));
     log.info(`x23 keywordSearch: ${pairs.length} docs`);
+    metrics.addDocs(pairs.length);
     return pairs;
   }
 
@@ -180,6 +183,7 @@ export class X23Client {
     const results = data.result?.results ?? [];
     const pairs = results.map((it) => ({ raw: it, doc: this.mapItemToDocChunk(it) }));
     log.info(`x23 vectorSearch: ${pairs.length} docs`);
+    metrics.addDocs(pairs.length);
     return pairs;
   }
 
@@ -202,6 +206,7 @@ export class X23Client {
     const results = data.result?.results ?? [];
     const pairs = results.map((it) => ({ raw: it, doc: this.mapItemToDocChunk(it) }));
     log.info(`x23 hybridSearch: ${pairs.length} docs`);
+    metrics.addDocs(pairs.length);
     return pairs;
   }
 
@@ -225,6 +230,7 @@ export class X23Client {
     const citations = results.map((it) => this.mapItemToDocChunk(it));
     const ret: AnswerSynthesis = { answer: data.result?.answer ?? '', citations, citationsRaw: results };
     log.info(`x23 officialDoc detail: ${citations.length} citations, answer=${ret.answer ? 'yes' : 'no'}`);
+    metrics.addDocs(citations.length);
     return ret;
   }
 
@@ -269,6 +275,7 @@ export class X23Client {
       },
     ];
     log.info(`x23 rawPosts: ${raw ? raw.length : 0} chars returned`);
+    metrics.addDocs(ret.length);
     return ret;
   }
 
@@ -290,6 +297,7 @@ export class X23Client {
       meta: { protocol: it.protocol, type: it.type },
     }));
     log.info(`x23 timeline: ${ret.length} items`);
+    metrics.addDocs(ret.length);
     return ret;
   }
 }

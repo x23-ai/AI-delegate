@@ -3,7 +3,7 @@ import type { FactCheckOutput } from '../types.js';
 import type { LLMClient } from '../llm/index.js';
 import { createLLM } from '../llm/index.js';
 import type { DocChunk } from '../tools/x23.js';
-import { evaluateExpression, nearlyEqual } from '../utils/math.js';
+import { evaluateExpression, nearlyEqual, normalizeAsciiMath } from '../utils/math.js';
 import { log, colors } from '../utils/logger.js';
 import { AVAILABLE_PROTOCOLS, AVAILABLE_ITEM_TYPES } from '../utils/x23Config.js';
 import { loadRolePrompt } from '../utils/roles.js';
@@ -33,7 +33,7 @@ const ARITHMETIC_CONFIRM_SYSTEM_SUFFIX = [
   '- Replace words/suffixes (k, M, B, million, billion, thousand), currency symbols, commas with numbers.',
   "- Convert constructs like 'X% of Y' to '(X/100)*Y' and 'bps' to '/10000'.",
   '- If APR with compounding is present, convert APR→APY only when explicitly indicated; otherwise treat % as a simple rate.',
-  'Return JSON { equation: string, steps: string[], value: number }. Keep equation short (numbers and +-*/ only).',
+  'Return JSON { equation: string, steps: string[], value: number }. Keep equation short (numbers and +-*/ only) and use only standard ASCII characters so it can be evaluated in JavaScript (no unicode operators).',
 ].join('\n');
 
 type ClaimStatus = 'supported' | 'contested' | 'unknown';
@@ -149,7 +149,7 @@ export const FactSleuth: FactCheckerAgent = {
         },
         required: ['proposalSummary', 'assumptions'],
       },
-      { schemaName: 'assumptionPack', maxOutputTokens: 8000 }
+      { schemaName: 'assumptionPack', maxOutputTokens: 8000, difficulty: 'normal' }
     );
 
     ctx.trace.addStep({
@@ -189,7 +189,7 @@ export const FactSleuth: FactCheckerAgent = {
           },
           required: ['status', 'citations', 'confidence'],
         },
-        { schemaName: 'claimEval', maxOutputTokens: 2600 }
+        { schemaName: 'claimEval', maxOutputTokens: 2600, difficulty: 'normal' }
       );
       const chosenUris = classification.citations
         .map((i) => evidenceList.find((e) => e.idx === i)?.uri)
@@ -243,7 +243,7 @@ export const FactSleuth: FactCheckerAgent = {
           },
           required: ['checks'],
           },
-          { schemaName: 'arithmeticPlan', maxOutputTokens: 6000 }
+          { schemaName: 'arithmeticPlan', maxOutputTokens: 6000, difficulty: 'normal' }
         );
       }
 
@@ -266,7 +266,8 @@ export const FactSleuth: FactCheckerAgent = {
         log.info(`FactChecker: evaluating ${arithChecks.length} arithmetic checks${maxArith > 0 ? ` (capped from ${arithmeticPlan.checks.length})` : ''}`);
         for (const chk of arithChecks) {
           try {
-            const valueLocal = evaluateExpression(chk.expression);
+            const exprAscii = normalizeAsciiMath(chk.expression);
+            const valueLocal = evaluateExpression(exprAscii);
             // Ask LLM to normalize and compute as an independent check
             const confirm = await llm.extractJSON<{ equation: string; steps?: string[]; value: number }>(
               sys(ARITHMETIC_CONFIRM_SYSTEM_SUFFIX),
@@ -280,7 +281,7 @@ export const FactSleuth: FactCheckerAgent = {
                 },
                 required: ['equation', 'value'],
               },
-              { schemaName: 'arithConfirm', maxOutputTokens: 1200 }
+              { schemaName: 'arithConfirm', maxOutputTokens: 1200, difficulty: 'normal' }
             );
             const valueLLM = typeof confirm?.value === 'number' ? confirm.value : valueLocal;
             const value = Number.isFinite(valueLLM) ? valueLLM : valueLocal;
@@ -303,11 +304,12 @@ export const FactSleuth: FactCheckerAgent = {
             if (status === 'supported') arithSupported++;
             else if (status === 'contested') arithContested++;
             else arithUnknown++;
+            const eqAscii = confirm?.equation ? normalizeAsciiMath(confirm.equation) : undefined;
             ctx.trace.addStep({
               type: 'factCheck',
               description: `Arithmetic check: ${chk.title}`,
               input: chk,
-              output: { valueLocal: valueLocal, valueLLM: valueLLM, finalValue: value, equation: confirm?.equation, status, note },
+              output: { valueLocal: valueLocal, valueLLM: valueLLM, finalValue: value, equation: eqAscii, status, note },
             });
           } catch (e) {
             const claimText = `Arithmetic: ${chk.title} (failed to evaluate)`;

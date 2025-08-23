@@ -30,7 +30,8 @@ export async function runConductor(
 
   // 1) Planning loop
   const totalPhases = 5;
-  log.info(`[1/${totalPhases}] Conductor: starting planning`);
+  log.banner('PLANNING', 'Agent: Navigator Cartographer — drafting objectives & tasks');
+  log.info(`[1/${totalPhases}] Conductor: handoff to Planner — define objectives and ordered tasks to evaluate the proposal`);
   let planning = await PlannerNavigator.run(ctx);
   // Pretty print plan overview
   try {
@@ -56,7 +57,7 @@ export async function runConductor(
         },
         required: ['satisfied', 'missing'],
       },
-      { schemaName: 'planningQA', maxOutputTokens: 4000 }
+      { schemaName: 'planningQA', maxOutputTokens: 4000, difficulty: 'normal' }
     );
     ctx.trace.addStep({
       type: 'planning',
@@ -88,28 +89,32 @@ export async function runConductor(
   ctx.cache?.set('planning', planning);
 
   // 2) Fact checking (no QA loop)
-  log.info(`[2/${totalPhases}] Conductor: starting fact checking`);
+  log.banner('FACT CHECK', "Agent: Veritas Sleuth — extract assumptions, search evidence, classify claims");
+  log.info(`[2/${totalPhases}] Conductor: handoff to Fact Checker — building corpus and evaluating assumptions`);
   let facts = await FactSleuth.run(ctx);
 
   // Cache facts stage
   ctx.cache?.set('facts', facts);
 
   // 3) Reasoning (no QA loop)
-  log.info(`[3/${totalPhases}] Conductor: starting reasoning`);
+  log.banner('REASONING', 'Agent: Cogito Sage — focus on top aspects, synthesize argument');
+  log.info(`[3/${totalPhases}] Conductor: handoff to Reasoner — forming structured argument grounded in vetted facts`);
   let reasoning = await CogitoSage.run(ctx);
 
   // Cache reasoning stage
   ctx.cache?.set('reasoning', reasoning);
 
   // 4) Challenge (no QA loop)
-  log.info(`[4/${totalPhases}] Conductor: starting devil's advocate`);
+  log.banner("CHALLENGE", "Agent: Red Team Raven — stress-test premises, surface counterpoints and failure modes");
+  log.info(`[4/${totalPhases}] Conductor: handoff to Devil's Advocate — testing the reasoning for weaknesses`);
   let challenge = await RedTeamRaven.run(ctx);
 
   // Cache challenge stage
   ctx.cache?.set('challenge', challenge);
 
   // 5) Adjudication (no QA loop)
-  log.info(`[5/${totalPhases}] Conductor: starting adjudication`);
+  log.banner('ADJUDICATION', 'Agent: Arbiter Solon — weigh all stages and recommend a vote');
+  log.info(`[5/${totalPhases}] Conductor: handoff to Judge — final recommendation with confidence`);
   let adjudication = await ArbiterSolon.run(ctx);
 
   return { planning, facts, reasoning, challenge, adjudication };

@@ -52,7 +52,7 @@ export const ArbiterSolon: JudgeAgent = {
         },
         required: ['recommendation', 'rationale', 'reason', 'confidence'],
       },
-      { schemaName, maxOutputTokens: 3000 }
+      { schemaName, maxOutputTokens: 3000, difficulty: 'hard' }
     );
 
     ctx.trace.addStep({

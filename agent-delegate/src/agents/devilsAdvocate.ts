@@ -88,7 +88,7 @@ export const RedTeamRaven: DevilsAdvocateAgent = {
         },
         required: ['counterpoints', 'confidence'],
       },
-      { schemaName, maxOutputTokens: 4000 }
+      { schemaName, maxOutputTokens: 4000, difficulty: 'normal' }
     );
     const counterpoints = out.counterpoints || [];
     const failureModes = out.failureModes || [];
