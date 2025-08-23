@@ -36,7 +36,7 @@ export interface ReasoningTrace {
 }
 
 // Agent orchestration scaffolding
-export type VoteSupport = 'for' | 'against' | 'abstain' | 'defer';
+export type VoteSupport = 'for' | 'against' | 'abstain';
 
 export interface ProposalInput {
   // Identifiers and seed context the conductor will ingest
@@ -87,6 +87,7 @@ export interface ChallengeOutput {
 export interface AdjudicationOutput {
   recommendation: VoteSupport;
   rationale: string;
+  reason: string;
   confidence?: number;
 }
 

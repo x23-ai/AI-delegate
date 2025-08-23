@@ -5,8 +5,12 @@ import { createLLM } from '../llm/index.js';
 import { loadRolePrompt } from '../utils/roles.js';
 
 // LLM prompts (editable)
-const JUDGE_PROMPT_SYSTEM_SUFFIX =
-  'You are the final judge. Consider each stage output and its confidence. Produce a recommendation with rationale and confidence (0..1).';
+const JUDGE_PROMPT_SYSTEM_SUFFIX = [
+  'You are the final judge. Consider each stage output and its confidence.',
+  '- Rationale: describe your internal thought process, explicitly weighing pros and cons based on Planner, FactChecker, Reasoner, and Devil’s Advocate conclusions. Be transparent about tradeoffs and key uncertainties.',
+  "- Reason: a concise, publication-ready explanation of the vote for onchain posting (no more than 2-3 sentences).",
+  'Produce JSON with recommendation, rationale, reason, and confidence (0..1).',
+].join('\n');
 
 export const ArbiterSolon: JudgeAgent = {
   kind: 'judge',
@@ -31,8 +35,9 @@ export const ArbiterSolon: JudgeAgent = {
     const traceLabel =
       process.env.JUDGE_TRACE_LABEL || 'Judge produced recommendation with confidence';
     const result = await llm.extractJSON<{
-      recommendation: 'for' | 'against' | 'abstain' | 'defer';
+      recommendation: 'for' | 'against' | 'abstain';
       rationale: string;
+      reason: string;
       confidence: number;
     }>(
       `${role}\n\n${JUDGE_PROMPT_SYSTEM_SUFFIX}`,
@@ -40,11 +45,12 @@ export const ArbiterSolon: JudgeAgent = {
       {
         type: 'object',
         properties: {
-          recommendation: { type: 'string', enum: ['for', 'against', 'abstain', 'defer'] },
+          recommendation: { type: 'string', enum: ['for', 'against', 'abstain'] },
           rationale: { type: 'string' },
+          reason: { type: 'string' },
           confidence: { type: 'number' },
         },
-        required: ['recommendation', 'rationale', 'confidence'],
+        required: ['recommendation', 'rationale', 'reason', 'confidence'],
       },
       { schemaName, maxOutputTokens: 3000 }
     );
@@ -58,6 +64,7 @@ export const ArbiterSolon: JudgeAgent = {
     return {
       recommendation: result.recommendation,
       rationale: result.rationale,
+      reason: result.reason,
       confidence: result.confidence,
     };
   },

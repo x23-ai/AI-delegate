@@ -81,13 +81,16 @@ export class X23Client {
     };
     if (this.config.apiKey) headers['x-api-key'] = this.config.apiKey;
     const method = (init?.method || 'GET').toUpperCase();
-    let bodyPreview: string | undefined;
-    try {
-      const b = (init as any)?.body;
-      if (typeof b === 'string') bodyPreview = b;
-      else if (b) bodyPreview = JSON.stringify(b);
-    } catch {}
-    log.info(`${colors.cyan('x23 request')} → ${method} ${path}`, bodyPreview ? { body: bodyPreview } : undefined);
+    // Do not log request bodies at info level
+    log.info(`${colors.cyan('x23 request')} → ${method} ${path}`);
+    // Optionally emit request body at debug level
+    if (DEBUG_LEVEL >= 2) {
+      try {
+        const b = (init as any)?.body;
+        const bodyPreview = typeof b === 'string' ? b : b ? JSON.stringify(b) : undefined;
+        if (bodyPreview) log.debug('x23 request body', { method, path, body: bodyPreview });
+      } catch {}
+    }
     const spinner = log.spinner(`x23 ${method} ${path}`);
     try {
       const res = await fetch(url, { ...init, headers: { ...headers, ...(init?.headers as any) } });

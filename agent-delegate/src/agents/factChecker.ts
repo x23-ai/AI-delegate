@@ -28,6 +28,14 @@ const ARITHMETIC_EXTRACT_SYSTEM_SUFFIX =
 const CLAIM_CLASSIFY_SYSTEM_SUFFIX =
   'Classify whether the claim is supported, contested, or unknown given the evidence. Cite indices of evidence used. Return JSON { status, basis, citations:number[], confidence:number in [0,1] }.';
 
+const ARITHMETIC_CONFIRM_SYSTEM_SUFFIX = [
+  'You verify an arithmetic expression by rewriting it into an explicit numeric equation and computing the result.',
+  '- Replace words/suffixes (k, M, B, million, billion, thousand), currency symbols, commas with numbers.',
+  "- Convert constructs like 'X% of Y' to '(X/100)*Y' and 'bps' to '/10000'.",
+  '- If APR with compounding is present, convert APR→APY only when explicitly indicated; otherwise treat % as a simple rate.',
+  'Return JSON { equation: string, steps: string[], value: number }. Keep equation short (numbers and +-*/ only).',
+].join('\n');
+
 type ClaimStatus = 'supported' | 'contested' | 'unknown';
 
 export const FactSleuth: FactCheckerAgent = {
@@ -258,14 +266,40 @@ export const FactSleuth: FactCheckerAgent = {
         log.info(`FactChecker: evaluating ${arithChecks.length} arithmetic checks${maxArith > 0 ? ` (capped from ${arithmeticPlan.checks.length})` : ''}`);
         for (const chk of arithChecks) {
           try {
-            const value = evaluateExpression(chk.expression);
+            const valueLocal = evaluateExpression(chk.expression);
+            // Ask LLM to normalize and compute as an independent check
+            const confirm = await llm.extractJSON<{ equation: string; steps?: string[]; value: number }>(
+              sys(ARITHMETIC_CONFIRM_SYSTEM_SUFFIX),
+              `Title: ${chk.title}\nExpression: ${chk.expression}\n${typeof chk.claimedValue === 'number' ? `ClaimedValue: ${chk.claimedValue}\nTolerance: ${chk.tolerance ?? ''}` : ''}`,
+              {
+                type: 'object',
+                properties: {
+                  equation: { type: 'string' },
+                  steps: { type: 'array', items: { type: 'string' } },
+                  value: { type: 'number' },
+                },
+                required: ['equation', 'value'],
+              },
+              { schemaName: 'arithConfirm', maxOutputTokens: 1200 }
+            );
+            const valueLLM = typeof confirm?.value === 'number' ? confirm.value : valueLocal;
+            const value = Number.isFinite(valueLLM) ? valueLLM : valueLocal;
             let status: ClaimStatus = 'supported';
+            let confidence = 0.9;
+            let note = '';
             if (typeof chk.claimedValue === 'number') {
               const ok = nearlyEqual(value, chk.claimedValue, 1e-6, chk.tolerance ?? 1e-6);
               status = ok ? 'supported' : 'contested';
+              confidence = ok ? 0.95 : 0.6;
+              note = ok ? 'LLM-confirmed' : 'LLM/local mismatch with claimed';
+            } else {
+              // No claimed value; use LLM+local agreement to adjust confidence
+              const agree = nearlyEqual(valueLLM, valueLocal, 1e-6, 1e-6);
+              confidence = agree ? 0.9 : 0.7;
+              note = agree ? 'LLM agrees' : 'LLM differs slightly';
             }
             const claimText = `Arithmetic: ${chk.title} => ${value}${typeof chk.claimedValue === 'number' ? ` (claimed ${chk.claimedValue})` : ''}`;
-            claims.push({ claim: claimText, status, citations: [], confidence: 0.9 });
+            claims.push({ claim: claimText, status, citations: [], confidence });
             if (status === 'supported') arithSupported++;
             else if (status === 'contested') arithContested++;
             else arithUnknown++;
@@ -273,7 +307,7 @@ export const FactSleuth: FactCheckerAgent = {
               type: 'factCheck',
               description: `Arithmetic check: ${chk.title}`,
               input: chk,
-              output: { value, status },
+              output: { valueLocal: valueLocal, valueLLM: valueLLM, finalValue: value, equation: confirm?.equation, status, note },
             });
           } catch (e) {
             const claimText = `Arithmetic: ${chk.title} (failed to evaluate)`;

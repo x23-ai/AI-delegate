@@ -49,7 +49,13 @@ function sanitizeToolPlan(plan: SearchToolPlan): SearchToolPlan {
 export async function selectSearchTool(
   ctx: AgentContext,
   llm: LLMClient,
-  params: { rolePrompt?: string; claimOrQuery: string; hints?: string[]; payloadDigest?: string; previouslyTried?: any[] }
+  params: {
+    rolePrompt?: string;
+    claimOrQuery: string;
+    hints?: string[];
+    payloadDigest?: string;
+    previouslyTried?: any[];
+  }
 ): Promise<SearchToolPlan> {
   const { rolePrompt, claimOrQuery, hints, payloadDigest, previouslyTried } = params;
   const body = previouslyTried
@@ -112,7 +118,13 @@ export async function runSearchTool(
     const pairs = await (ctx.x23 as any).hybridSearchRaw(params);
     const docs = pairs.map((p: any) => p.doc);
     const raws = pairs.map((p: any) => p.raw);
-    attempts.push({ tool: 'hybrid', query: q, similarityThreshold: params.similarityThreshold, itemTypes: params.itemTypes, resultCount: docs.length });
+    attempts.push({
+      tool: 'hybrid',
+      query: q,
+      similarityThreshold: params.similarityThreshold,
+      itemTypes: params.itemTypes,
+      resultCount: docs.length,
+    });
     return { docs, raws };
   }
   async function tryVector(th?: number, broaden?: boolean) {
@@ -126,7 +138,13 @@ export async function runSearchTool(
     const pairs = await (ctx.x23 as any).vectorSearchRaw(params);
     const docs = pairs.map((p: any) => p.doc);
     const raws = pairs.map((p: any) => p.raw);
-    attempts.push({ tool: 'vector', query: q, similarityThreshold: params.similarityThreshold, itemTypes: params.itemTypes, resultCount: docs.length });
+    attempts.push({
+      tool: 'vector',
+      query: q,
+      similarityThreshold: params.similarityThreshold,
+      itemTypes: params.itemTypes,
+      resultCount: docs.length,
+    });
     return { docs, raws };
   }
   async function tryKeyword(broaden?: boolean) {
@@ -135,7 +153,12 @@ export async function runSearchTool(
     const pairs = await (ctx.x23 as any).keywordSearchRaw(params);
     const docs = pairs.map((p: any) => p.doc);
     const raws = pairs.map((p: any) => p.raw);
-    attempts.push({ tool: 'keyword', query: q, itemTypes: params.itemTypes, resultCount: docs.length });
+    attempts.push({
+      tool: 'keyword',
+      query: q,
+      itemTypes: params.itemTypes,
+      resultCount: docs.length,
+    });
     return { docs, raws };
   }
   if (plan.tool === 'none') {
@@ -158,7 +181,8 @@ export async function runSearchTool(
     }
     if (docs.length === 0) {
       const hybrid = await tryHybrid((plan.similarityThreshold ?? 0.4) - 0.05, true);
-      docs = hybrid.docs; raws = hybrid.raws;
+      docs = hybrid.docs;
+      raws = hybrid.raws;
     }
     return { docs, attempts, raws };
   }
@@ -166,7 +190,8 @@ export async function runSearchTool(
     let { docs, raws } = await tryKeyword();
     if (docs.length === 0) {
       const hybrid = await tryHybrid(0.3, true);
-      docs = hybrid.docs; raws = hybrid.raws;
+      docs = hybrid.docs;
+      raws = hybrid.raws;
     }
     return { docs, attempts, raws };
   }
@@ -192,7 +217,7 @@ export async function maybeExpandWithRawPosts(
       sys(rolePrompt, RAW_POSTS_DECISION_PROMPT),
       `Claim: ${claim}\nDoc: ${JSON.stringify(top)}`,
       RAW_POSTS_DECISION_SCHEMA as any,
-      { schemaName: 'rawPostsDecision', maxOutputTokens: 4000 }
+      { schemaName: 'rawPostsDecision', maxOutputTokens: 6000 }
     );
     if (!decision.useRawPosts) return undefined;
     const discussionUrl = DISCUSSION_URL;
@@ -202,8 +227,18 @@ export async function maybeExpandWithRawPosts(
       if (m) topicId = m[1];
     }
     if (!topicId) return undefined;
-    const posts = await ctx.x23.getDiscussionPosts({ discussionUrl, topicId, minimumUnix: decision.minimumUnix });
-    const rawDoc: DocChunk = { id: `${topicId}:raw`, title: 'Discussion raw posts', uri: discussionUrl, snippet: posts[0]?.body?.slice(0, 1200), source: 'discussion' };
+    const posts = await ctx.x23.getDiscussionPosts({
+      discussionUrl,
+      topicId,
+      minimumUnix: decision.minimumUnix,
+    });
+    const rawDoc: DocChunk = {
+      id: `${topicId}:raw`,
+      title: 'Discussion raw posts',
+      uri: discussionUrl,
+      snippet: posts[0]?.body?.slice(0, 1200),
+      source: 'discussion',
+    };
     return rawDoc;
   } catch {
     return undefined;
@@ -228,8 +263,19 @@ export async function maybeExpandWithOfficialDetail(
     );
     if (!decision.useOfficialDetail) return undefined;
     const q = (decision.question || claim).slice(0, 256);
-    const ans = await ctx.x23.officialHybridAnswer({ query: q, topK: 5, protocols: AVAILABLE_PROTOCOLS, similarityThreshold: 0.4, realtime: true });
-    const doc: DocChunk = { id: 'official-detail', title: 'Official doc detail', snippet: ans.answer?.slice(0, 1200), source: 'officialDoc' };
+    const ans = await ctx.x23.officialHybridAnswer({
+      query: q,
+      topK: 5,
+      protocols: AVAILABLE_PROTOCOLS,
+      similarityThreshold: 0.4,
+      realtime: true,
+    });
+    const doc: DocChunk = {
+      id: 'official-detail',
+      title: 'Official doc detail',
+      snippet: ans.answer?.slice(0, 1200),
+      source: 'officialDoc',
+    };
     return doc;
   } catch {
     return undefined;
@@ -242,20 +288,25 @@ export async function findEvidenceForClaim(
   rolePrompt: string | undefined,
   claim: string,
   hints?: string[],
-  opts?: { seenUris?: Set<string> }
+  opts?: { seenUris?: Set<string>; priorAttempts?: any[] }
 ): Promise<{ docs: DocChunk[]; attempts: any[] }> {
   // Shared cache: ctx.cache -> evidenceCache (Map)
   const cacheKeyRoot = 'evidenceCache';
   const cacheMap = ((): Map<string, { ts: number; docs: DocChunk[]; attempts: any[] }> => {
     if (!ctx.cache) return new Map();
-    const existing = ctx.cache.get(cacheKeyRoot) as Map<string, { ts: number; docs: DocChunk[]; attempts: any[] }> | undefined;
+    const existing = ctx.cache.get(cacheKeyRoot) as
+      | Map<string, { ts: number; docs: DocChunk[]; attempts: any[] }>
+      | undefined;
     if (existing) return existing;
     const m = new Map<string, { ts: number; docs: DocChunk[]; attempts: any[] }>();
     ctx.cache.set(cacheKeyRoot, m);
     return m;
   })();
   const normClaim = (claim || '').toLowerCase().replace(/\s+/g, ' ').trim();
-  const normHints = (hints || []).map((h) => (h || '').toLowerCase().trim()).filter(Boolean).sort();
+  const normHints = (hints || [])
+    .map((h) => (h || '').toLowerCase().trim())
+    .filter(Boolean)
+    .sort();
   const cacheKey = JSON.stringify({ c: normClaim, h: normHints });
   const ttlMs = Number(process.env.EVIDENCE_CACHE_TTL_MS || 10 * 60 * 1000);
   const now = Date.now();
@@ -266,10 +317,13 @@ export async function findEvidenceForClaim(
   }
   const payloadDigest = (ctx.proposal.payload || [])
     .slice(0, 8)
-    .map((p, i) => `P${i + 1}: [${p.type}] ${p.uri || ''} :: ${JSON.stringify(p.data || p.metadata || {}).slice(0, 160)}`)
+    .map(
+      (p, i) =>
+        `P${i + 1}: [${p.type}] ${p.uri || ''} :: ${JSON.stringify(p.data || p.metadata || {}).slice(0, 160)}`
+    )
     .join('\n');
 
-  const tried: any[] = [];
+  const tried: any[] = Array.isArray(opts?.priorAttempts) ? [...opts!.priorAttempts!] : [];
   // Optional: prefer official-doc search first for policy/compliance claims or when globally enabled
   const attempts: any[] = [];
   const preferOfficialAll = String(process.env.OFFICIAL_FIRST_ALL || '').toLowerCase();
@@ -291,18 +345,44 @@ export async function findEvidenceForClaim(
   }
   if (preferOfficial) {
     try {
+      // Optional: rewrite the query for concise, search-optimized form
+      let q = claim.slice(0, 256);
+      try {
+        const rewrite = await llm.extractJSON<{ query: string }>(
+          sys(rolePrompt, QUERY_REWRITE_SYSTEM_PROMPT),
+          `Claim: ${claim}\nTitle: ${ctx.proposal.title || ''}`,
+          QUERY_REWRITE_SCHEMA as any,
+          { schemaName: 'queryRewriteOfficialFirst', maxOutputTokens: 2000 }
+        );
+        const before = q.trim();
+        const after = (rewrite?.query || '').trim();
+        const mustPreserve: string[] = [];
+        (before.match(/\b\d+\b/g) || []).forEach((m) => mustPreserve.push(m));
+        AVAILABLE_PROTOCOLS.forEach((p) => {
+          if (before.toLowerCase().includes(p)) mustPreserve.push(p);
+        });
+        const preserves = mustPreserve.every((t) => after.toLowerCase().includes(t.toLowerCase()));
+        if (after && after.length <= before.length && preserves) q = after;
+      } catch {}
+
       const ans = await ctx.x23.officialHybridAnswer({
-        query: claim.slice(0, 256),
+        query: q,
         protocols: AVAILABLE_PROTOCOLS,
         topK: 6,
         similarityThreshold: 0.4,
-        realtime: true,
+        // realtime disabled for faster citations-only retrieval
+        realtime: false,
       });
       const docsOff = (ans.citations || []).slice(0, 6);
       attempts.push({ tool: 'officialDoc', query: claim, resultCount: docsOff.length });
       if (docsOff.length > 0) {
         // Represent the detailed answer as an additional pseudo-doc, then citations
-        const detail: DocChunk = { id: 'official-detail', title: 'Official doc detail', snippet: ans.answer?.slice(0, 1000), source: 'officialDoc' };
+        const detail: DocChunk = {
+          id: 'official-detail',
+          title: 'Official doc detail',
+          snippet: ans.answer?.slice(0, 1000),
+          source: 'officialDoc',
+        };
         let docs = [detail, ...docsOff];
         // Timeline enrichment using raw citation if available
         try {
@@ -313,7 +393,7 @@ export async function findEvidenceForClaim(
               id: `tl-${i}-${it.id}`,
               title: `Timeline: ${it.label}`,
               uri: it.uri,
-              snippet: `${it.timestamp} ${(it.meta?.type ? `[${String(it.meta?.type)}] ` : '')}${it.label}`,
+              snippet: `${it.timestamp} ${it.meta?.type ? `[${String(it.meta?.type)}] ` : ''}${it.label}`,
               source: 'timeline',
               score: 1,
             }));
@@ -329,15 +409,27 @@ export async function findEvidenceForClaim(
     }
   }
 
-  for (let iter = 0; iter < Math.max(1, Math.min(3, Number(process.env.REASONER_MAX_FACT_ITERS || '2'))); iter++) {
-    const plan = await selectSearchTool(ctx, llm, { rolePrompt, claimOrQuery: claim, hints, payloadDigest, previouslyTried: tried });
+  for (
+    let iter = 0;
+    iter < Math.max(1, Math.min(3, Number(process.env.REASONER_MAX_FACT_ITERS || '2')));
+    iter++
+  ) {
+    const plan = await selectSearchTool(ctx, llm, {
+      rolePrompt,
+      claimOrQuery: claim,
+      hints,
+      payloadDigest,
+      previouslyTried: tried,
+    });
     tried.push({ tool: plan.tool, query: plan.query });
     const exec = await runSearchTool(ctx, plan, claim);
     const rawDoc = await maybeExpandWithRawPosts(ctx, llm, rolePrompt, claim, exec.docs);
     const offDoc = await maybeExpandWithOfficialDetail(ctx, llm, rolePrompt, claim, exec.docs);
     let docs = [rawDoc, offDoc].filter(Boolean).concat(exec.docs) as DocChunk[];
     // Timeline enrichment for temporal/process claims
-    if (/timeline|phase|epoch|deadline|date|snapshot|onchain|vote|voting|prop(ose|osal)/i.test(claim)) {
+    if (
+      /timeline|phase|epoch|deadline|date|snapshot|onchain|vote|voting|prop(ose|osal)/i.test(claim)
+    ) {
       try {
         const topDoc = exec.docs[0] || docs[0];
         const topRaw = (exec as any).raws && (exec as any).raws[0];
@@ -348,7 +440,7 @@ export async function findEvidenceForClaim(
             id: `tl-${i}-${it.id}`,
             title: `Timeline: ${it.label}`,
             uri: it.uri,
-            snippet: `${it.timestamp} ${(it.meta?.type ? `[${String(it.meta?.type)}] ` : '')}${it.label}`,
+            snippet: `${it.timestamp} ${it.meta?.type ? `[${String(it.meta?.type)}] ` : ''}${it.label}`,
             source: 'timeline',
             score: 1,
           }));
@@ -392,8 +484,9 @@ export async function planSeedSearch(
   const sys = (s: string) => (rolePrompt ? `${rolePrompt}\n\n${s}` : s);
   const payload = (ctx.proposal.payload || [])
     .slice(0, 6)
-    .map((p, i) =>
-      `P${i + 1} [${p.type}] ${p.uri || ''} :: ${JSON.stringify(p.data || p.metadata || {}).slice(0, 140)}`
+    .map(
+      (p, i) =>
+        `P${i + 1} [${p.type}] ${p.uri || ''} :: ${JSON.stringify(p.data || p.metadata || {}).slice(0, 140)}`
     )
     .join('\n');
   const seedPlan = await llm.extractJSON<{ query: string; protocols?: string[] }>(
@@ -411,5 +504,7 @@ function isPolicyHint(h: string): boolean {
 }
 function isPolicyLikeClaim(c: string): boolean {
   const s = (c || '').toLowerCase();
-  return /policy|charter|manual|law|constitution|guideline|rules?|mandate|terms|framework|compliance|official/.test(s);
+  return /policy|charter|manual|law|constitution|guideline|rules?|mandate|terms|framework|compliance|official/.test(
+    s
+  );
 }
