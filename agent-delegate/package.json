@@ -10,7 +10,8 @@
     "start": "node dist/index.js",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write .",
-    "orchestrate": "tsx src/orchestrate.ts"
+    "orchestrate": "tsx src/orchestrate.ts",
+    "test:prices": "tsx scripts/test-prices.ts"
   },
   "license": "MIT",
   "keywords": [],

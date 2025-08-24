@@ -10,6 +10,7 @@ import type {
 import { TraceBuilder } from '../trace.js';
 import { X23Client } from '../tools/x23.js';
 import type { LLMClient } from '../llm/index.js';
+import type { AlchemyPricesClient } from '../tools/prices.js';
 
 export type AgentKind =
   | 'conductor'
@@ -26,6 +27,7 @@ export interface AgentContext {
   // space for other shared state (snapshots, temp caches, etc.)
   cache?: Map<string, unknown>;
   llm?: LLMClient;
+  prices?: AlchemyPricesClient;
 }
 
 export interface Agent<TOutput> {

@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '.env', override: true });
 import { TraceBuilder } from './trace.js';
 import { X23Client } from './tools/x23.js';
+import { AlchemyPricesClient } from './tools/prices.js';
 import { runConductor } from './agents/conductor.js';
 import { createLLM } from './llm/index.js';
 import type { AgentContext } from './agents/types.js';
@@ -21,11 +22,13 @@ async function main() {
 
   const trace = new TraceBuilder(proposalId, agentId);
   const x23 = new X23Client({ apiKey: process.env.X23_API_KEY });
+  const prices = new AlchemyPricesClient();
   const llm = createLLM();
 
   const ctx: AgentContext = {
     proposal,
     x23,
+    prices,
     trace,
     cache: new Map(),
     llm,

@@ -112,3 +112,27 @@ export const QUERY_REWRITE_SCHEMA = {
   properties: { query: { type: 'string' } },
   required: ['query'],
 } as const;
+
+// Price lookup decision — when a claim depends on market price
+export const PRICE_DECISION_PROMPT = [
+  'You decide if resolving this claim benefits from a token price lookup (spot or historical).',
+  '- Use spot when the claim references current price; use historical when a date/range is implied.',
+  '- Prefer symbol when unambiguous (e.g., OP); otherwise, use network + address if available or suggested.',
+  'Return JSON: { usePrice: boolean, mode?: "spot"|"historical", symbol?: string, network?: string, address?: string, currency?: string, startTime?: number, endTime?: number, interval?: "5m"|"1h"|"1d" }',
+].join('\n');
+
+export const PRICE_DECISION_SCHEMA = {
+  type: 'object',
+  properties: {
+    usePrice: { type: 'boolean' },
+    mode: { type: 'string', enum: ['spot', 'historical'] },
+    symbol: { type: 'string' },
+    network: { type: 'string' },
+    address: { type: 'string' },
+    currency: { type: 'string' },
+    startTime: { type: 'number' },
+    endTime: { type: 'number' },
+    interval: { type: 'string', enum: ['5m', '1h', '1d'] },
+  },
+  required: ['usePrice'],
+} as const;

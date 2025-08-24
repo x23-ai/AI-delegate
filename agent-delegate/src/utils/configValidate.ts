@@ -45,5 +45,18 @@ export function validateConfig(): void {
     protocols: AVAILABLE_PROTOCOLS,
     forum: DISCUSSION_URL,
   });
-}
 
+  // Optional: Alchemy Prices API key for price checks
+  if (!process.env.ALCHEMY_PRICES_API_KEY) {
+    log.warn('ALCHEMY_PRICES_API_KEY not set — price lookups will be unavailable');
+  }
+  // Optional: Symbol map for price fallback
+  if (process.env.ALCHEMY_PRICES_SYMBOL_MAP) {
+    try {
+      const m = JSON.parse(process.env.ALCHEMY_PRICES_SYMBOL_MAP);
+      if (!m || typeof m !== 'object') throw new Error('not an object');
+    } catch (e) {
+      log.warn('Invalid ALCHEMY_PRICES_SYMBOL_MAP (must be JSON object mapping symbol→{network,address})');
+    }
+  }
+}

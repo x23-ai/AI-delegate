@@ -10,6 +10,7 @@ This package orchestrates multi‑agent evaluation of governance proposals (plan
 - Reasoner iterative loop: repeats search→refine up to `REASONER_REFINE_ITERS` with an explicit continue/stop decision and per‑iteration rollups.
 - Prompt templating: role prompts accept `{{protocols}}` and `{{forumRoot}}` via `src/utils/prompt.ts`.
 - Config validation: early validation of required env and knob ranges with clear errors.
+ - Alchemy Prices tool: `src/tools/prices.ts` provides spot and historical token prices for assets like OP to ground calculations.
 
 ## Prompts and Tool Definitions
 
@@ -50,6 +51,19 @@ Provided by `src/tools/evidence.ts` and used by FactChecker, Reasoner, Devil’s
 - Evidence cache (TTL `EVIDENCE_CACHE_TTL_MS`, default 600000) keyed by `(normalizedClaim,hints)`; de‑dups by `uri`.
 - Timeline enrichment for temporal/process claims via `x23.getTimeline` (mapped to pseudo‑docs).
 - “Official‑first” routing: LLM decides when to consult official docs first; if no citations returned, falls back to other tools.
+
+### Prices (Alchemy)
+
+- File: `src/tools/prices.ts`; client: `AlchemyPricesClient`
+- Env: `ALCHEMY_PRICES_API_KEY` (required), optional `ALCHEMY_PRICES_BASE_URL`, `ALCHEMY_PRICES_BY_SYMBOL_PATH`, `ALCHEMY_PRICES_BY_ADDRESS_PATH`, `ALCHEMY_PRICES_HIST_PATH`
+ - Optional env mapping for symbol→address: `ALCHEMY_PRICES_SYMBOL_MAP` as a JSON object.
+   - Example: `{"OP":{"network":"opt-mainnet","address":"0x4200000000000000000000000000000000000042"}}`
+   - Used for automatic fallback in historical lookups when a symbol series returns 0 points.
+- Usage examples:
+  - `await new AlchemyPricesClient().getSpotPrice({ symbol: 'OP', currencies: ['USD'] })`
+  - `await new AlchemyPricesClient().getHistoricalSeries({ symbol: 'OP', start: '2024-01-01', end: '2024-02-01', interval: '1d' })`
+  - `await new AlchemyPricesClient().getSpotPrice({ asset: { address: '0x4200...0042', network: 'opt-mainnet' }, currencies: ['USD'] })`
+  - `await new AlchemyPricesClient().getHistoricalSeries({ asset: { address: '0x4200...0042', network: 'opt-mainnet' }, start: '2024-01-01', end: '2024-02-01', interval: '1d' })`
 
 ## Agent Behaviors
 

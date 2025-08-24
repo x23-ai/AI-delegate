@@ -15,8 +15,32 @@ Implemented in `agent-delegate/src/tools/evidence.ts` and used by FactChecker, R
 - Optional query rewrite (`QUERY_REWRITE_*`). Disable via `FACT_ENABLE_QUERY_REWRITE=0`.
 - Official‑doc detail (`OFFICIAL_DETAIL_DECISION_*`) and raw forum posts (`RAW_POSTS_DECISION_*`) expansions when snippets are insufficient.
 - Evidence cache: keyed by `(normalizedClaim,hints)`, TTL `EVIDENCE_CACHE_TTL_MS` (default 600000), with URI de‑duplication.
-- Timeline enrichment: for temporal/process claims (proposal phase, snapshot/onchain votes) via `x23.getTimeline`, mapped into pseudo‑docs.
-- Official‑first routing: An LLM decision (`OFFICIAL_FIRST_DECISION_*`) determines if a claim is policy/compliance oriented and should query official docs first. Always‑on override via `OFFICIAL_FIRST_ALL=1`.
+- Timeline enrichment: for temporal/process claims (proposal phase, snapshot/onchain votes) via `x23.getTimeline`, mapped into pseudo-docs.
+- Official-first routing: An LLM decision (`OFFICIAL_FIRST_DECISION_*`) determines if a claim is policy/compliance oriented and should query official docs first. Always-on override via `OFFICIAL_FIRST_ALL=1`.
+
+### Prices Tool (Alchemy Prices API)
+
+- File: `agent-delegate/src/tools/prices.ts`
+- Client: `AlchemyPricesClient`
+- Purpose: Fetch current (spot) and historical token prices for assets like OP, to ground arithmetic checks or claims that depend on market prices.
+- Access from agents: via `ctx.prices` (constructed in `orchestrate.ts`) or import the client directly.
+- LLM-driven decision: Agents may ask the LLM whether a price lookup helps via `PRICE_DECISION_*` and, when true, the shared evidence toolkit adds a price pseudo-doc to the evidence set.
+- Env config:
+  - `ALCHEMY_PRICES_API_KEY` (required to use the tool)
+  - `ALCHEMY_PRICES_BASE_URL` (default `https://api.g.alchemy.com/prices/v1`)
+  - `ALCHEMY_PRICES_BY_SYMBOL_PATH` (default `tokens/by-symbol`)
+  - `ALCHEMY_PRICES_BY_ADDRESS_PATH` (default `tokens/by-address`)
+  - `ALCHEMY_PRICES_HIST_PATH` (default `tokens/historical`)
+  - `ALCHEMY_PRICES_SYMBOL_MAP` (optional JSON mapping for symbol→{ network, address })
+    - Example: `{ "OP": { "network": "opt-mainnet", "address": "0x4200...0042" } }`
+- Usage examples:
+  - Spot by symbol: `await new AlchemyPricesClient().getSpotPrice({ symbol: 'OP', currencies: ['USD'] })`
+  - Spot by address: `await new AlchemyPricesClient().getSpotPrice({ asset: { address: '0x4200..0042', network: 'opt-mainnet' }, currencies: ['USD'] })`
+  - Historical by symbol: `await new AlchemyPricesClient().getHistoricalSeries({ symbol: 'OP', start: '2024-01-01', end: '2024-02-01', interval: '1d' })`
+  - Historical by address: `await new AlchemyPricesClient().getHistoricalSeries({ asset: { address: '0x4200..0042', network: 'opt-mainnet' }, start: '2024-01-01', end: '2024-02-01', interval: '1d' })`
+  - Convenience: `KNOWN_ASSETS.OP_OPTIMISM` exposes OP’s canonical address on Optimism (chainId 10).
+
+Note: Endpoint shapes can vary by account; if your Alchemy account uses different route names, set the `*_PATH` env vars accordingly.
 
 ## Agent‑Specific Behavior
 

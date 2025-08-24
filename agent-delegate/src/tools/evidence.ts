@@ -12,6 +12,8 @@ import {
   QUERY_REWRITE_SCHEMA,
   OFFICIAL_FIRST_DECISION_PROMPT,
   OFFICIAL_FIRST_DECISION_SCHEMA,
+  PRICE_DECISION_PROMPT,
+  PRICE_DECISION_SCHEMA,
 } from './definitions.js';
 import { AVAILABLE_ITEM_TYPES, AVAILABLE_PROTOCOLS, DISCUSSION_URL } from '../utils/x23Config.js';
 
@@ -282,6 +284,71 @@ export async function maybeExpandWithOfficialDetail(
   }
 }
 
+export async function maybeExpandWithPrice(
+  ctx: AgentContext,
+  llm: LLMClient,
+  rolePrompt: string | undefined,
+  claim: string
+): Promise<DocChunk | undefined> {
+  try {
+    if (!ctx.prices) return undefined;
+    const dec = await llm.extractJSON<{
+      usePrice: boolean;
+      mode?: 'spot' | 'historical';
+      symbol?: string;
+      network?: string;
+      address?: string;
+      currency?: string;
+      startTime?: number;
+      endTime?: number;
+      interval?: '5m' | '1h' | '1d';
+    }>(
+      sys(rolePrompt, PRICE_DECISION_PROMPT),
+      `Claim: ${claim}`,
+      PRICE_DECISION_SCHEMA as any,
+      { schemaName: 'priceDecision', maxOutputTokens: 1200, difficulty: 'normal' }
+    );
+    if (!dec?.usePrice) return undefined;
+    const currency = (dec.currency || 'USD') as any;
+    if (dec.mode === 'historical' && (dec.startTime || dec.endTime)) {
+      const series = await ctx.prices.getHistoricalSeries({
+        symbol: dec.symbol,
+        asset: dec.address ? { address: dec.address, network: dec.network } : undefined,
+        start: dec.startTime || Date.now() - 24 * 60 * 60,
+        end: dec.endTime,
+        interval: dec.interval || '1d',
+        withMarketData: false,
+      });
+      const n = series.points.length;
+      const first = series.points[0];
+      const last = series.points[n - 1];
+      const title = `Price historical: ${dec.symbol || dec.address || 'asset'} in ${currency}`;
+      const snippet = n
+        ? `points=${n}; first=${first.price} @ ${first.ts}; last=${last.price} @ ${last.ts}`
+        : 'no points returned';
+      const doc: DocChunk = {
+        id: `price-hist-${dec.symbol || dec.address || 'asset'}`,
+        title,
+        snippet,
+        source: 'price',
+      };
+      return doc;
+    }
+    // default to spot
+    const spot = await ctx.prices.getSpotPrice({
+      symbol: dec.symbol,
+      asset: dec.address ? { address: dec.address, network: dec.network } : undefined,
+      currencies: [currency],
+    });
+    const title = `Price spot: ${dec.symbol || dec.address || 'asset'} in ${currency}`;
+    const snippet = `price=${spot.price} @ ${spot.at}`;
+    const doc: DocChunk = { id: `price-spot-${dec.symbol || dec.address || 'asset'}`, title, snippet, source: 'price' };
+    return doc;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function findEvidenceForClaim(
   ctx: AgentContext,
   llm: LLMClient,
@@ -401,6 +468,11 @@ export async function findEvidenceForClaim(
           }
         } catch {}
         docs = dedupByUri(docs, opts?.seenUris);
+        // Optional price expansion
+        try {
+          const priceDoc = await maybeExpandWithPrice(ctx, llm, rolePrompt, claim);
+          if (priceDoc) docs = [priceDoc, ...docs];
+        } catch {}
         cacheMap.set(cacheKey, { ts: now, docs, attempts });
         return { docs, attempts };
       }
@@ -426,6 +498,11 @@ export async function findEvidenceForClaim(
     const rawDoc = await maybeExpandWithRawPosts(ctx, llm, rolePrompt, claim, exec.docs);
     const offDoc = await maybeExpandWithOfficialDetail(ctx, llm, rolePrompt, claim, exec.docs);
     let docs = [rawDoc, offDoc].filter(Boolean).concat(exec.docs) as DocChunk[];
+    // Optional price expansion
+    try {
+      const priceDoc = await maybeExpandWithPrice(ctx, llm, rolePrompt, claim);
+      if (priceDoc) docs = [priceDoc, ...docs];
+    } catch {}
     // Timeline enrichment for temporal/process claims
     if (
       /timeline|phase|epoch|deadline|date|snapshot|onchain|vote|voting|prop(ose|osal)/i.test(claim)

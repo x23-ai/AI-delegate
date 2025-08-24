@@ -16,6 +16,7 @@ import {
   runSearchTool,
   maybeExpandWithRawPosts,
   maybeExpandWithOfficialDetail,
+  maybeExpandWithPrice,
 } from '../tools/evidence.js';
 import { applyPromptTemplate } from '../utils/prompt.js';
 import { DISCUSSION_URL } from '../utils/x23Config.js';
@@ -444,7 +445,8 @@ export const FactSleuth: FactCheckerAgent = {
         // Optionally expand with raw posts if needed
         const rawDoc = await maybeExpandWithRawPosts(ctx, llm, role, a.claim, exec.docs);
         const offDoc = await maybeExpandWithOfficialDetail(ctx, llm, role, a.claim, exec.docs);
-        const docsForEval = [rawDoc, offDoc].filter(Boolean).concat(exec.docs) as DocChunk[];
+        const priceDoc = await maybeExpandWithPrice(ctx, llm, role, a.claim);
+        const docsForEval = [priceDoc, rawDoc, offDoc].filter(Boolean).concat(exec.docs) as DocChunk[];
         const retCount = exec.docs?.length || 0;
         log.info(`FactChecker: tool returned ${retCount} docs`);
         tried.push({
