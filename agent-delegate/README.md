@@ -23,6 +23,22 @@ If you’re a coding agent, see AGENTS.md for build steps, tests, and convention
 - Dev run: `npm run orchestrate`
 - Build: `npm run build` then `npm start`
 
+### Quick Mode
+
+Use quick mode to cut runtime (at the cost of depth):
+
+- `npm run orchestrate -- --quick --proposal-id 123` (or add `--input[-dir]`)
+- Effects (defaults unless already set in env):
+  - `QUICK_MODE=1` (internal)
+  - `REASONER_REFINE_ITERS=1`
+  - `REASONER_PREMISE_EVIDENCE_MAX=2`, `REASONER_EVIDENCE_CONCURRENCY=1`
+  - `DEVILS_PREMISE_EVIDENCE_MAX=2`, `DEVILS_EVIDENCE_CONCURRENCY=1`
+  - `FACT_MAX_ITERS=1`, `FACT_MAX_CHECKS=4`, `FACT_MAX_ARITH_CHECKS=2`, `FACT_MIN_CITATIONS=1`, `FACT_ENABLE_QUERY_REWRITE=0`
+  - `SEARCH_LIMIT_DEFAULT=4` (fallback when the LLM does not specify a limit)
+  - Disables evidence expansions (raw posts, official-detail, curated sources, price lookups, timeline enrichment)
+
+This typically reduces runs from ~30 minutes to a few minutes, depending on proposal complexity and API latency.
+
 ## What’s New
 
 - Shared evidence toolkit across agents (FactChecker, Reasoner, Devil’s Advocate): LLM tool selection, query rewrite, rawPosts/official-detail expansion, caching + URI de‑dup, timeline enrichment.
@@ -124,7 +140,7 @@ Recommended/Configurable:
 - `FACT_MAX_ITERS`: Max refinement iterations per assumption in fact checking (default `2`).
 - `FACT_MAX_CHECKS`: Upper limit on number of assumptions the fact checker evaluates (processes the first N; `0` or unset processes all).
 - `FACT_MAX_ARITH_CHECKS`: Upper limit on number of arithmetic checks to evaluate (first N; `0` or unset processes all).
-- `SAVE_TRACE_JSON`: set to `1`/`true` to write the full reasoning trace to a JSON file after the run. Use `TRACE_JSON_PATH` to override the output path (default `dist/trace-proposal-<id>-<timestamp>.json`).
+- `SAVE_TRACE_JSON`: set to `1`/`true` to write the reasoning output to JSON. Use `TRACE_JSON_PATH` to override (default `results/trace-proposal-<id>-<timestamp>.json`). The file contains `{ trace, usageMetrics }` where `trace` is the full reasoning trace and `usageMetrics` summarizes LLM tokens/calls, x23 calls, and docs evaluated.
 - `FACT_MIN_CITATIONS`: Minimum citations required to consider a claim sufficiently evidenced (default `1`).
 - `FACT_MIN_CONFIDENCE`: Minimum confidence (0..1) from the fact-checker’s LLM classification to accept a claim without further refinement (default `0.6`).
  - `REASONER_REFINE_ITERS`: Max search→refine iterations for the Reasoner (default `2`).

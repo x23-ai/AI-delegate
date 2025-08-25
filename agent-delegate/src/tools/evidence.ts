@@ -114,7 +114,7 @@ export async function runSearchTool(
   plan: SearchToolPlan,
   fallbackQuery: string
 ): Promise<{ docs: DocChunk[]; attempts: any[]; answer?: string; raws?: any[] }> {
-  const topK = plan.limit ?? 6;
+  const topK = plan.limit ?? Number(process.env.SEARCH_LIMIT_DEFAULT || (process.env.QUICK_MODE ? '4' : '6'));
   const requestedProtocols = plan.protocols || [];
   const filteredProtocols = requestedProtocols.filter((p) => AVAILABLE_PROTOCOLS.includes(p));
   const protocols = filteredProtocols.length ? filteredProtocols : AVAILABLE_PROTOCOLS;
@@ -493,40 +493,48 @@ export async function findEvidenceForClaim(
     });
     tried.push({ tool: plan.tool, query: plan.query });
     const exec = await runSearchTool(ctx, plan, claim);
-    const rawDoc = await maybeExpandWithRawPosts(ctx, llm, rolePrompt, claim, exec.docs);
-    const offDoc = await maybeExpandWithOfficialDetail(ctx, llm, rolePrompt, claim, exec.docs);
+    const quick = String(process.env.QUICK_MODE || '').toLowerCase();
+    const quickOn = quick === '1' || quick === 'true' || quick === 'yes';
+    const rawDoc = quickOn ? undefined : await maybeExpandWithRawPosts(ctx, llm, rolePrompt, claim, exec.docs);
+    const offDoc = quickOn ? undefined : await maybeExpandWithOfficialDetail(ctx, llm, rolePrompt, claim, exec.docs);
     let docs = [rawDoc, offDoc].filter(Boolean).concat(exec.docs) as DocChunk[];
     // Optional curated source expansion
-    try {
-      const curatedDocs = await maybeExpandWithCuratedSource(ctx, llm, rolePrompt, claim);
-      if (curatedDocs?.length) docs = curatedDocs.concat(docs);
-    } catch {}
-    // Optional price expansion
-    try {
-      const priceDoc = await maybeExpandWithPrice(ctx, llm, rolePrompt, claim);
-      if (priceDoc) docs = [priceDoc, ...docs];
-    } catch {}
-    // Timeline enrichment for temporal/process claims
-    if (
-      /timeline|phase|epoch|deadline|date|snapshot|onchain|vote|voting|prop(ose|osal)/i.test(claim)
-    ) {
+    if (!quickOn) {
       try {
-        const topDoc = exec.docs[0] || docs[0];
-        const topRaw = (exec as any).raws && (exec as any).raws[0];
-        if (topRaw || topDoc?.uri) {
-          const ogItem = topRaw || { sourceUrl: topDoc?.uri, title: topDoc?.title || '' };
-          const items = await ctx.x23.getTimeline(ogItem, { scoreMatch: 0.2 });
-          const tlDocs: DocChunk[] = items.slice(0, 5).map((it, i) => ({
-            id: `tl-${i}-${it.id}`,
-            title: `Timeline: ${it.label}`,
-            uri: it.uri,
-            snippet: `${it.timestamp} ${it.meta?.type ? `[${String(it.meta?.type)}] ` : ''}${it.label}`,
-            source: 'timeline',
-            score: 1,
-          }));
-          docs = tlDocs.concat(docs);
-        }
+        const curatedDocs = await maybeExpandWithCuratedSource(ctx, llm, rolePrompt, claim);
+        if (curatedDocs?.length) docs = curatedDocs.concat(docs);
       } catch {}
+    }
+    // Optional price expansion
+    if (!quickOn) {
+      try {
+        const priceDoc = await maybeExpandWithPrice(ctx, llm, rolePrompt, claim);
+        if (priceDoc) docs = [priceDoc, ...docs];
+      } catch {}
+    }
+    // Timeline enrichment for temporal/process claims
+    if (!quickOn) {
+      if (
+        /timeline|phase|epoch|deadline|date|snapshot|onchain|vote|voting|prop(ose|osal)/i.test(claim)
+      ) {
+        try {
+          const topDoc = exec.docs[0] || docs[0];
+          const topRaw = (exec as any).raws && (exec as any).raws[0];
+          if (topRaw || topDoc?.uri) {
+            const ogItem = topRaw || { sourceUrl: topDoc?.uri, title: topDoc?.title || '' };
+            const items = await ctx.x23.getTimeline(ogItem, { scoreMatch: 0.2 });
+            const tlDocs: DocChunk[] = items.slice(0, 5).map((it, i) => ({
+              id: `tl-${i}-${it.id}`,
+              title: `Timeline: ${it.label}`,
+              uri: it.uri,
+              snippet: `${it.timestamp} ${it.meta?.type ? `[${String(it.meta?.type)}] ` : ''}${it.label}`,
+              source: 'timeline',
+              score: 1,
+            }));
+            docs = tlDocs.concat(docs);
+          }
+        } catch {}
+      }
     }
     docs = dedupByUri(docs, opts?.seenUris);
     if (docs.length > 0) {

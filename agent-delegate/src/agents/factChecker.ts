@@ -100,9 +100,10 @@ export const FactSleuth: FactCheckerAgent = {
 
     // Seed searches to build an initial corpus
     log.info(`FactChecker: building corpus with seed query '${seedQuery}'`);
+    const seedTopK = Number(process.env.FACT_SEED_TOPK || (process.env.QUICK_MODE ? '6' : '12'));
     const initialResults = await ctx.x23.hybridSearch({
       query: seedQuery,
-      topK: 12,
+      topK: Math.max(1, Math.min(20, seedTopK)),
       protocols: seedProtocols,
     });
 

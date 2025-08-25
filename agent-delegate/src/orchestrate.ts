@@ -17,6 +17,25 @@ import { metrics } from './utils/metrics.js';
 async function main() {
   // Validate configuration early for clearer errors
   validateConfig();
+  // Parse CLI flags and enable optional quick mode overrides
+  const argsEarly = getCliArgs();
+  const quickFlag = String(argsEarly['quick'] || '').toLowerCase();
+  const quick = quickFlag === '1' || quickFlag === 'true' || quickFlag === 'yes';
+  if (quick) {
+    // Set conservative knobs to reduce API calls and iterations
+    process.env.QUICK_MODE = '1';
+    process.env.REASONER_REFINE_ITERS = process.env.REASONER_REFINE_ITERS || '1';
+    process.env.REASONER_PREMISE_EVIDENCE_MAX = process.env.REASONER_PREMISE_EVIDENCE_MAX || '2';
+    process.env.REASONER_EVIDENCE_CONCURRENCY = process.env.REASONER_EVIDENCE_CONCURRENCY || '1';
+    process.env.DEVILS_PREMISE_EVIDENCE_MAX = process.env.DEVILS_PREMISE_EVIDENCE_MAX || '2';
+    process.env.DEVILS_EVIDENCE_CONCURRENCY = process.env.DEVILS_EVIDENCE_CONCURRENCY || '1';
+    process.env.FACT_MAX_ITERS = process.env.FACT_MAX_ITERS || '1';
+    process.env.FACT_MAX_CHECKS = process.env.FACT_MAX_CHECKS || '4';
+    process.env.FACT_MAX_ARITH_CHECKS = process.env.FACT_MAX_ARITH_CHECKS || '2';
+    process.env.FACT_MIN_CITATIONS = process.env.FACT_MIN_CITATIONS || '1';
+    process.env.FACT_ENABLE_QUERY_REWRITE = process.env.FACT_ENABLE_QUERY_REWRITE || '0';
+    process.env.SEARCH_LIMIT_DEFAULT = process.env.SEARCH_LIMIT_DEFAULT || '4';
+  }
   const proposal = loadProposalParams();
   const proposalId = proposal.id;
   const agentId = process.env.AGENT_ID || 'conductor-1';
@@ -39,6 +58,9 @@ async function main() {
 
   log.banner('ORCHESTRATION START', `Proposal ${proposalId}: ${proposal.title || 'untitled'}`);
   log.info('Orchestrator: initializing agents and tools');
+  if (quick) {
+    log.warn('Quick mode enabled: reduced iterations, lower search limits, no expansions');
+  }
   const result = await runConductor(ctx, llm);
   log.info('Orchestrator: run complete');
   console.log('Conductor pipeline result:', JSON.stringify(result, null, 2));
@@ -105,7 +127,9 @@ async function main() {
     const outPath = resolve(process.env.TRACE_JSON_PATH || defaultName);
     try {
       mkdirSync(dirname(outPath), { recursive: true });
-      writeFileSync(outPath, JSON.stringify(trace.getTrace(), null, 2));
+      // Persist the final trace along with usage metrics (not as a trace step)
+      const out = { trace: trace.getTrace(), usageMetrics: metrics.summary() };
+      writeFileSync(outPath, JSON.stringify(out, null, 2));
       log.info(`Reasoning trace saved to ${outPath}`);
     } catch (e) {
       log.error('Failed to save reasoning trace JSON', e);
