@@ -1,13 +1,13 @@
-swagger: "2.0"
+swagger: '2.0'
 info:
   title: x23.ai API v1 beta
-  version: "1.0.0"
+  version: '1.0.0'
   x-logo:
     {
-      "url": "http://api.x23.ai/images/x23logo.png",
-      "altText": "x23.ai logo",
-      "href": "https://x23.ai",
-      "hrefText": "x23.ai",
+      'url': 'http://api.x23.ai/images/x23logo.png',
+      'altText': 'x23.ai logo',
+      'href': 'https://x23.ai',
+      'hrefText': 'x23.ai',
     }
   description: |
     The **x23.ai API v1** provides access to most of the data available on the [x23.ai app](https://app.x23.ai).
@@ -63,15 +63,15 @@ security:
 paths:
   /supportedProtocols:
     get:
-      summary: "Get supported protocols"
+      summary: 'Get supported protocols'
       description: A list of the supported protocols/DAOs/communities, and the content item types that can be fetched for each.
       responses:
         200:
-          description: "A list of supported protocols"
+          description: 'A list of supported protocols'
           content:
             application/json:
               schema:
-                $ref: "#/definitions/SupportedProtocolsResponse"
+                $ref: '#/definitions/SupportedProtocolsResponse'
               examples:
                 success:
                   summary: Success response
@@ -80,35 +80,28 @@ paths:
                     status: success
                     result:
                       protocols:
-                        - name: "aave"
-                          formattedName: "Aave"
+                        - name: 'aave'
+                          formattedName: 'Aave'
                           supportedItemTypes:
-                            [
-                              "discussion",
-                              "snapshot",
-                              "onchain",
-                              "code",
-                              "pullRequest",
-                            ]
-                        - name: "makerdao"
-                          formattedName: "Sky Money"
-                          supportedItemTypes:
-                            ["discussion", "code", "pullRequest"]
+                            ['discussion', 'snapshot', 'onchain', 'code', 'pullRequest']
+                        - name: 'makerdao'
+                          formattedName: 'Sky Money'
+                          supportedItemTypes: ['discussion', 'code', 'pullRequest']
 
   /supportedItemTypes:
     get:
-      summary: "Get supported item types"
+      summary: 'Get supported item types'
       description: |
         A list of the supported item types.
 
         These usually correspond to a specific data source such as governance forums, snapshot, onchain proposals, etc.
       responses:
         200:
-          description: "A list of supported item types"
+          description: 'A list of supported item types'
           content:
             application/json:
               schema:
-                $ref: "#/definitions/SupportedItemTypesResponse"
+                $ref: '#/definitions/SupportedItemTypesResponse'
               examples:
                 success:
                   summary: Success response
@@ -117,14 +110,14 @@ paths:
                     status: success
                     result:
                       itemTypes:
-                        - "discussion"
-                        - "snapshot"
-                        - "onchain"
-                        - "code"
-                        - "pullRequest"
+                        - 'discussion'
+                        - 'snapshot'
+                        - 'onchain'
+                        - 'code'
+                        - 'pullRequest'
   /recentFeed:
     post:
-      summary: "Retrieve recent feed items"
+      summary: 'Retrieve recent feed items'
       description: |
         Retrieve a list of the most **recent** newsfeed items, in chronological order.
 
@@ -132,23 +125,23 @@ paths:
       parameters:
         - in: body
           name: body
-          description: "Request payload"
+          description: 'Request payload'
           required: false
           schema:
-            $ref: "#/definitions/RecentFeedRequest"
+            $ref: '#/definitions/RecentFeedRequest'
           x-examples:
             application/json:
               example:
                 value:
-                  protocols: ["aave"]
+                  protocols: ['aave']
                   limit: 3
       responses:
         200:
-          description: "Recent feed items fetched successfully"
+          description: 'Recent feed items fetched successfully'
           content:
             application/json:
               schema:
-                $ref: "#/definitions/ApiDefaultReturnTypeRecent"
+                $ref: '#/definitions/ApiDefaultReturnTypeRecent'
               examples:
                 success:
                   summary: Success response
@@ -158,47 +151,47 @@ paths:
                     result:
                       recent:
                         - id: 625
-                          title: "Aavechan/v2 deprecation"
-                          headline: "Aave V2 Borrowing Disabled to Encourage Migration to V3 with New Risk Parameters"
+                          title: 'Aavechan/v2 deprecation'
+                          headline: 'Aave V2 Borrowing Disabled to Encourage Migration to V3 with New Risk Parameters'
                           digest: "## What is this about?\\n\\nThis change disables borrowing and adjusts risk parameters for Aave V2 assets on Ethereum, Polygon, and Avalanche networks to encourage migration to Aave V3.\\n\\n## Why is this important?\\n\\nThese changes are designed to mitigate risks from volatile collateral and reduce bad debt for the Aave DAO by further deprecating Aave V2 and accelerating the transition to V3.\\n\\n## How does it work?\\n\\nNew Solidity contracts execute parameter updates on each network..."
-                          tldr: "The update disables borrowing and adjusts risk parameters for Aave V2 assets on Ethereum, Polygon, and Avalanche to encourage migration to Aave V3..."
+                          tldr: 'The update disables borrowing and adjusts risk parameters for Aave V2 assets on Ethereum, Polygon, and Avalanche to encourage migration to Aave V3...'
                           created: 1740128787
                           updated: 1740569117
                           merged: null
                           score: 443.6040828084293
-                          state: "open"
-                          owner: "bgd-labs"
-                          repo: "aave-proposals-v3"
-                          protocol: "aave"
-                          type: "pullRequest"
-                          appUrl: "https://app.x23.ai/aave/code/bgd-labs/aave-proposals-v3/pr/625"
+                          state: 'open'
+                          owner: 'bgd-labs'
+                          repo: 'aave-proposals-v3'
+                          protocol: 'aave'
+                          type: 'pullRequest'
+                          appUrl: 'https://app.x23.ai/aave/code/bgd-labs/aave-proposals-v3/pr/625'
                         - id: 2843
                           title: "Grant Application - CoW AMM's & LP Tokens in Tycho"
-                          headline: "CoWDAO Proposal: $10K xDAI Grant for CoW AMM & LP Integration into Tycho by 2025"
+                          headline: 'CoWDAO Proposal: $10K xDAI Grant for CoW AMM & LP Integration into Tycho by 2025'
                           digest: "## What is this about?\\n\\n@markus has proposed a grant to integrate CoW AMM's and the trading of CoW AMM LP tokens into Tycho, an open-source swap indexer. The grant is structured around two key milestones:\\n\\n1. **Milestone 1**: Implementation of support for CoW AMM's and CoW AMM LP tokens in Tycho, with a deadline of March 30, 2025. This involves creating a Solidity Adapter Contract..."
                           tldr: "The proposal by @markus for a grant to integrate CoW AMM's and LP tokens into Tycho aims to enhance platform functionality and user experience..."
                           created: 1740091943
                           updated: 1740572762
                           score: 1805.8444807993008
-                          author: "markus"
-                          protocol: "cowdao"
-                          type: "discussion"
-                          appUrl: "https://app.x23.ai/cowdao/discussions/topic/2843/grant-application-cow-amms-lp-tokens-in-tycho"
-                        - id: "0xe7fb39bd6f16b65d0847cdd6ab6ecef3a6c1e89bd523cf895f3d806c4bb4b1cf"
-                          title: "[Temp Check] Unichain and Uniswap v4 Liquidity Incentives"
+                          author: 'markus'
+                          protocol: 'cowdao'
+                          type: 'discussion'
+                          appUrl: 'https://app.x23.ai/cowdao/discussions/topic/2843/grant-application-cow-amms-lp-tokens-in-tycho'
+                        - id: '0xe7fb39bd6f16b65d0847cdd6ab6ecef3a6c1e89bd523cf895f3d806c4bb4b1cf'
+                          title: '[Temp Check] Unichain and Uniswap v4 Liquidity Incentives'
                           headline: "Uniswap Foundation's Liquidity Incentive Proposal Faces Community Pushback"
                           digest: "## What is this about?\n\nThis proposal, put forward by the Uniswap Foundation with contributions from Gauntlet, seeks to fund liquidity incentive programs for Uniswap v4 and Unichain. The aim is to attract initial liquidity providers (LPs), swappers, and developers to these platforms"
-                          tldr: "The proposal by the Uniswap Foundation aims to fund liquidity incentive programs for Uniswap v4 and Unichain to attract liquidity providers..."
+                          tldr: 'The proposal by the Uniswap Foundation aims to fund liquidity incentive programs for Uniswap v4 and Unichain to attract liquidity providers...'
                           start: 1740536707
                           end: 1740968707
                           score: 2491.500212881955
-                          protocol: "uniswap"
-                          type: "snapshot"
-                          appUrl: "https://app.x23.ai/uniswap/voting/snapshot/0xe7fb39bd6f16b65d0847cdd6ab6ecef3a6c1e89bd523cf895f3d806c4bb4b1cf/temp-check-unichain-and-uniswap-v4-liquidity-incentives"
+                          protocol: 'uniswap'
+                          type: 'snapshot'
+                          appUrl: 'https://app.x23.ai/uniswap/voting/snapshot/0xe7fb39bd6f16b65d0847cdd6ab6ecef3a6c1e89bd523cf895f3d806c4bb4b1cf/temp-check-unichain-and-uniswap-v4-liquidity-incentives'
 
   /topScoreFeed:
     post:
-      summary: "Retrieve top scored items"
+      summary: 'Retrieve top scored items'
       description: |
         Retrieves a list of the top scored items, as shown under the **Trending** section on the [x23.ai newsfeeds](https://app.x23.ai).
 
@@ -206,24 +199,24 @@ paths:
       parameters:
         - in: body
           name: body
-          description: "Top score feed request payload"
+          description: 'Top score feed request payload'
           required: false
           schema:
-            $ref: "#/definitions/TopScoreFeedRequest"
+            $ref: '#/definitions/TopScoreFeedRequest'
           x-examples:
             application/json:
               example:
                 value:
-                  protocols: ["arbitrum"]
+                  protocols: ['arbitrum']
                   scoreThreshold: 2200
                   limit: 3
       responses:
         200:
-          description: "Top scored items fetched successfully"
+          description: 'Top scored items fetched successfully'
           content:
             application/json:
               schema:
-                $ref: "#/definitions/ApiDefaultReturnTypeTop"
+                $ref: '#/definitions/ApiDefaultReturnTypeTop'
               examples:
                 success:
                   summary: Success response
@@ -232,36 +225,36 @@ paths:
                     status: success
                     result:
                       topRated:
-                        - id: "47215139570733026393508270943324710379923699871435188004224569883226292800465"
-                          title: "# Arbitrum D.A.O. (Domain Allocator Offerings) Grant Program - Season 3"
-                          headline: "Arbitrum DAO Grant Program Seeks $6.75M for Season 3, Adds Orbit Domain"
+                        - id: '47215139570733026393508270943324710379923699871435188004224569883226292800465'
+                          title: '# Arbitrum D.A.O. (Domain Allocator Offerings) Grant Program - Season 3'
+                          headline: 'Arbitrum DAO Grant Program Seeks $6.75M for Season 3, Adds Orbit Domain'
                           digest: "## What is this about?\n\nThis proposal seeks to renew the Arbitrum D.A.O. Grant Program for a third season, extending its duration to one year. Previously known as the Questbook grant program, it aims to continue supporting projects across four existing domains: New Protocols and Ideas, Dev Tooling, Gaming, and Education/Community/Events, while introducing a fifth domain, Orbit. The total funding requested is $6,750,000, with $1,500,000 allocated to each of the four main domains and $750,000 for the experimental Orbit domain. The program will maintain its structure, allowing grantees to request up to $50,000, with a focus on milestone-based funding. Questbook will remain the technological partner, and specific Domain Allocators (DAs) have been elected for each domain..."
                           voteResults: "## How is the community reacting?\n\nThe proposal has seen participation from 4,417 voters, with a total voting weight of 184,170,893.35. The quorum requirement of 121,701,781.55 has been met, as the total weight for quorum, which includes only \"for\" and \"abstain\" votes, is 163,981,258.48.\n\n- **Voters For:** 2,490 voters with a weight of 130,177,108.19.\n- **Voters Abstain:** 908 voters with a weight of 33,804,150.29.\n- **Voters Against:** 1,019 voters with a weight of 20,189,634.87.\n\nThe community has shown a strong inclination towards supporting the proposal, as indicated by the significant weight of votes in favor."
                           voteReasons: "**Voted For:**\n\n- Support for the proposal stems from its potential to drive activity within the DAO, with concerns that without such initiatives, the DAO might stagnate.\n- Questbook has been recognized for effectively onboarding grantees, with a reasonable budget request that is competitive in the space, encouraging growth and anticipation for Season 3 results.\n- The grant program is credited with supporting new projects and developers, fostering growth and innovation within the Arbitrum ecosystem. The addition of a new domain for Orbit Chains is seen as a positive expansion.\n  \n**Voted Abstain:**\n\n- The abstention was primarily due to late involvement in the DAO, limiting the ability to provide informed feedback.\n- There is a suggestion to focus more on coaching and supporting projects beyond just funding, drawing parallels with successful Web2 accelerator programs.\n- Trust in the current team to make decisions beneficial for the ecosystem was expressed, leading to an abstention rather than opposition.\n\n**Voted Against:**\n\n- Dissatisfaction with the previous round of Questbook applications was a key reason for voting against the proposal.\n- There is a sentiment that the current approach may not be the right path forward."
-                          tldr: "The proposal to renew the Arbitrum D.A.O. Grant Program for a third season seeks $6,750,000 to support projects across five domains, including a new experimental domain called Orbit, with a focus on milestone-based funding and enhanced tracking of grantee progress..."
+                          tldr: 'The proposal to renew the Arbitrum D.A.O. Grant Program for a third season seeks $6,750,000 to support projects across five domains, including a new experimental domain called Orbit, with a focus on milestone-based funding and enhanced tracking of grantee progress...'
                           start: 1738858175
                           end: 1740168683
                           score: 3126.361280154916
-                          protocol: "arbitrum"
-                          governor: "treasuryGovernance"
-                          type: "onchain"
-                          appUrl: "https://app.x23.ai/arbitrum/voting/onchain/treasuryGovernance/47215139570733026393508270943324710379923699871435188004224569883226292800465"
+                          protocol: 'arbitrum'
+                          governor: 'treasuryGovernance'
+                          type: 'onchain'
+                          appUrl: 'https://app.x23.ai/arbitrum/voting/onchain/treasuryGovernance/47215139570733026393508270943324710379923699871435188004224569883226292800465'
                         - id: 28368
-                          title: "Arbitrum Audit Program"
-                          headline: "Arbitrum Proposes $10M Audit Subsidy to Boost Network Security and Scalability"
+                          title: 'Arbitrum Audit Program'
+                          headline: 'Arbitrum Proposes $10M Audit Subsidy to Boost Network Security and Scalability'
                           digest: "## What is this about?\\n\\nThe discussion centers on a proposal by @Arbitrum to create an Arbitrum Audit Committee. This committee aims to subsidize audits for projects launching on the Arbitrum network, with a one-year program and a $10 million budget to support around 100 projects. An additional $60,000 is allocated for a technical expert. The committee will include members from the Arbitrum Foundation, Offchain Labs, and a technical expert elected by the DAO, following a strict conflict of interest policy. The proposal outlines criteria for assessing projects, such as technical maturity, team experience..."
-                          tldr: "The proposal to establish an Arbitrum Audit Committee aims to subsidize audits for projects on the Arbitrum network with a $10 million budget, fostering development by enhancing scalability and security, though concerns about fair pricing and resource overlap exist..."
+                          tldr: 'The proposal to establish an Arbitrum Audit Committee aims to subsidize audits for projects on the Arbitrum network with a $10 million budget, fostering development by enhancing scalability and security, though concerns about fair pricing and resource overlap exist...'
                           created: 1738855708
                           updated: 1740572641
                           score: 3026.6063129508952
-                          author: "Arbitrum"
-                          protocol: "arbitrum"
-                          type: "discussion"
-                          appUrl: "https://app.x23.ai/arbitrum/discussions/topic/28368/arbitrum-audit-program"
+                          author: 'Arbitrum'
+                          protocol: 'arbitrum'
+                          type: 'discussion'
+                          appUrl: 'https://app.x23.ai/arbitrum/discussions/topic/28368/arbitrum-audit-program'
 
   /digestFeed:
     post:
-      summary: "Retrieve daily/weekly/monthly digests"
+      summary: 'Retrieve daily/weekly/monthly digests'
       description: |
         Retrieve a digest for a specific time period, e.g., daily, weekly, monthly.
 
@@ -271,24 +264,24 @@ paths:
       parameters:
         - in: body
           name: body
-          description: "Digest feed request payload"
+          description: 'Digest feed request payload'
           required: true
           schema:
-            $ref: "#/definitions/DigestFeedRequest"
+            $ref: '#/definitions/DigestFeedRequest'
           x-examples:
             application/json:
               example:
                 value:
-                  protocols: ["aave"]
-                  timePeriod: "daily"
+                  protocols: ['aave']
+                  timePeriod: 'daily'
                   unixTimestamp: 1740572893
       responses:
         200:
-          description: "Digest feed fetched successfully"
+          description: 'Digest feed fetched successfully'
           content:
             application/json:
               schema:
-                $ref: "#/definitions/ApiDefaultReturnTypeDigest"
+                $ref: '#/definitions/ApiDefaultReturnTypeDigest'
               examples:
                 sucess:
                   summary: Success response
@@ -297,21 +290,21 @@ paths:
                     status: success
                     result:
                       digest:
-                        - protocol: "aave"
-                          id: "2025-02-26"
+                        - protocol: 'aave'
+                          id: '2025-02-26'
                           updated: 1740572893
                           topScores:
                             digest: "The proposal to add bCSPX to Aave V3 on the Gnosis Chain is gaining traction, aiming to integrate Real World Asset tokens and offer exposure to S&P 500 returns. This move is seen as a way to enhance Aave's position in RWA lending and bridge TradFi and DeFi. Despite community support, LlamaRisk advises caution due to concerns over pricing volatility and ownership concentration, with no further actions decided yet[1].\n\nChaosLabs and LlamaRisk's proposal to update Aave's price feed for sUSDe and USDe to align with USDT pricing has passed the ARFC Snapshot. This update is intended to reduce liquidation risks and potential bad debt for Aave users, with Ethena's insurance fund providing additional risk mitigation..."
                             references:
-                              - "https://app.x23.ai/aave/discussions/topic/21113/arfc-add-bcspx-to-aave-v3-gnosis-instance"
+                              - 'https://app.x23.ai/aave/discussions/topic/21113/arfc-add-bcspx-to-aave-v3-gnosis-instance'
                           latest:
                             digest: "The proposal by ChaosLabs and LlamaRisk to update Aave's price feed for sUSDe and USDe aims to align with USDT pricing, reducing liquidation risks and potential bad debt for Aave users. Ethena's insurance fund provides additional risk mitigation. The proposal has passed the ARFC Snapshot, and the next steps involve the publication and implementation of an AIP, which is currently under review on GitHub[1].\n\nA proposal to add bCSPX to Aave V3 on the Gnosis Chain seeks to integrate Real World Asset tokens, offering exposure to S&P 500 returns and enhancing Aave's position in RWA lending..."
                             references:
-                              - "https://app.x23.ai/aave/discussions/topic/20495/arfc-susde-and-usde-price-feed-update"
+                              - 'https://app.x23.ai/aave/discussions/topic/20495/arfc-susde-and-usde-price-feed-update'
 
   /keywordSearch:
     post:
-      summary: "Perform keyword search"
+      summary: 'Perform keyword search'
       description: |
         Performs a keyword search across all content items, with optional filters.
 
@@ -321,26 +314,26 @@ paths:
       parameters:
         - in: body
           name: body
-          description: "Keyword search request payload"
+          description: 'Keyword search request payload'
           required: true
           schema:
-            $ref: "#/definitions/KeywordSearchRequest"
+            $ref: '#/definitions/KeywordSearchRequest'
           x-examples:
             application/json:
               example:
                 value:
-                  query: "optimism grants season 7"
+                  query: 'optimism grants season 7'
                   sortByRelevance: true
-                  protocols: ["optimism"]
-                  itemTypes: ["officialDoc", "discussion"]
+                  protocols: ['optimism']
+                  itemTypes: ['officialDoc', 'discussion']
                   limit: 20
       responses:
         200:
-          description: "Keyword search results"
+          description: 'Keyword search results'
           content:
             application/json:
               schema:
-                $ref: "#/definitions/ApiDefaultReturnTypeKeyword"
+                $ref: '#/definitions/ApiDefaultReturnTypeKeyword'
               examples:
                 success:
                   summary: Success response
@@ -349,26 +342,26 @@ paths:
                     status: success
                     result:
                       results:
-                        - id: "Grants Council Charter v0.1.md"
-                          digest: "The Optimism Grants Council Season 7 Charter outlines the structure and responsibilities for distributing funds from the Governance Fund.  The Council aims to drive Superchain growth metrics like TVL, stablecoin, wrapped asset, and bridged asset TVL..."
-                          protocol: "optimism"
-                          type: "officialDoc"
-                          url: "https://github.com/ethereum-optimism/OPerating-manual/blob/main/Grants%20Council%20Charter%20v0.1.md"
+                        - id: 'Grants Council Charter v0.1.md'
+                          digest: 'The Optimism Grants Council Season 7 Charter outlines the structure and responsibilities for distributing funds from the Governance Fund.  The Council aims to drive Superchain growth metrics like TVL, stablecoin, wrapped asset, and bridged asset TVL...'
+                          protocol: 'optimism'
+                          type: 'officialDoc'
+                          url: 'https://github.com/ethereum-optimism/OPerating-manual/blob/main/Grants%20Council%20Charter%20v0.1.md'
                         - id: 9583
-                          title: "Milestones and Metrics Council - S7 Internal Operating Procedures"
-                          headline: "M&M Council Optimistically Streamlines Grant Milestone Management for Season 7"
+                          title: 'Milestones and Metrics Council - S7 Internal Operating Procedures'
+                          headline: 'M&M Council Optimistically Streamlines Grant Milestone Management for Season 7'
                           digest: "## What is this about?\\n\\nThe discussion focuses on the internal operating procedures for the Milestones and Metrics Council (M&M Council) during Season 7. The M&M Council is responsible for assessing and tracking milestones for grants that have passed the Grants Council intake process, as well as for grant recipients from previous seasons of the Optimism Grants Council and DAB audit grants..."
-                          tldr: "The Milestones and Metrics Council (M&M Council) is refining its internal procedures for managing grant milestones during Season 7, focusing on communication, cycle management, and workflow efficiency using tools like Charmverse..."
+                          tldr: 'The Milestones and Metrics Council (M&M Council) is refining its internal procedures for managing grant milestones during Season 7, focusing on communication, cycle management, and workflow efficiency using tools like Charmverse...'
                           created: 1737870466
                           updated: 1738150262
                           score: 475.5354987128994
-                          author: "Juanbug_PGov"
-                          protocol: "optimism"
-                          type: "discussion"
-                          appUrl: "https://app.x23.ai/optimism/discussions/topic/9583/milestones-and-metrics-council-s7-internal-operating-procedures"
+                          author: 'Juanbug_PGov'
+                          protocol: 'optimism'
+                          type: 'discussion'
+                          appUrl: 'https://app.x23.ai/optimism/discussions/topic/9583/milestones-and-metrics-council-s7-internal-operating-procedures'
   /ragSearch:
     post:
-      summary: "Perform RAG/vector search"
+      summary: 'Perform RAG/vector search'
       description: |
         Performs a RAG/vector search across all content items, with optional filters.
 
@@ -380,25 +373,25 @@ paths:
       parameters:
         - in: body
           name: body
-          description: "RAG search request payload"
+          description: 'RAG search request payload'
           required: true
           schema:
-            $ref: "#/definitions/RagSearchRequest"
+            $ref: '#/definitions/RagSearchRequest'
           x-examples:
             application/json:
               example:
                 value:
-                  query: "optimism grants season 7"
+                  query: 'optimism grants season 7'
                   similarityThreshold: 0.5
-                  protocols: ["optimism"]
-                  itemTypes: ["officialDoc", "discussion"]
+                  protocols: ['optimism']
+                  itemTypes: ['officialDoc', 'discussion']
       responses:
         200:
-          description: "RAG search results"
+          description: 'RAG search results'
           content:
             application/json:
               schema:
-                $ref: "#/definitions/ApiDefaultReturnTypeRag"
+                $ref: '#/definitions/ApiDefaultReturnTypeRag'
               examples:
                 success:
                   summary: Success response
@@ -408,32 +401,32 @@ paths:
                     result:
                       results:
                         - id: 7332
-                          title: "Season 6 Banner"
+                          title: 'Season 6 Banner'
                           headline: "Optimism Collective's Season 6: Structured Grants and Public Calendar Aim for Transparency"
                           digest: "## What is this about?\\n\\nThe discussion is about the Optimism Collective's announcement for Season 6. The season starts on June 27th and ends on December 11th. Grant applications open on July 18th and occur every three weeks until December..."
                           tldr: "The Optimism Collective's Season 6, running from June 27th to December 11th, offers structured grant application opportunities every three weeks starting July 18th, potentially increasing participation and transparency through a public governance calendar..."
                           created: 1704900758
                           updated: 1730753133
                           score: 466.4965065359669
-                          author: "system"
-                          protocol: "optimism"
-                          type: "discussion"
-                          appUrl: "https://app.x23.ai/optimism/discussions/topic/7332/season-6-banner"
+                          author: 'system'
+                          protocol: 'optimism'
+                          type: 'discussion'
+                          appUrl: 'https://app.x23.ai/optimism/discussions/topic/7332/season-6-banner'
                         - id: 9637
-                          title: "Season 7: Grants Are Now Open!"
-                          headline: "Season 7 Grants Open: Boost On-Chain Metrics and Earn OP Rewards"
+                          title: 'Season 7: Grants Are Now Open!'
+                          headline: 'Season 7 Grants Open: Boost On-Chain Metrics and Earn OP Rewards'
                           digest: "## What is this about?\\n\\nThe discussion is about the opening of Season 7 grants, announced by @brichis. The application process has been simplified and will remain open until May 20th. Projects can apply for grants across multiple chains, including all green and orange chains in the Registry, not limited to OP Mainnet. The focus for this season is on projects that align with key on-chain success metrics..."
-                          tldr: "Season 7 grants are open for applications until May 20th, focusing on projects that boost on-chain success metrics like TVL across multiple chains, with a simplified process..."
+                          tldr: 'Season 7 grants are open for applications until May 20th, focusing on projects that boost on-chain success metrics like TVL across multiple chains, with a simplified process...'
                           created: 1738971865
                           updated: 1739210601
                           score: 894.1355217311711
-                          author: "brichis"
-                          protocol: "optimism"
-                          type: "discussion"
-                          appUrl: "https://app.x23.ai/optimism/discussions/topic/9637/season-7-grants-are-now-open"
+                          author: 'brichis'
+                          protocol: 'optimism'
+                          type: 'discussion'
+                          appUrl: 'https://app.x23.ai/optimism/discussions/topic/9637/season-7-grants-are-now-open'
   /hybridSearch:
     post:
-      summary: "Perform hybrid search"
+      summary: 'Perform hybrid search'
       description: |
         Performs a hybrid search across all content items, with optional filters.
 
@@ -445,22 +438,22 @@ paths:
       parameters:
         - in: body
           name: body
-          description: "Hybrid search request payload"
+          description: 'Hybrid search request payload'
           required: true
           schema:
-            $ref: "#/definitions/HybridSearchRequest"
+            $ref: '#/definitions/HybridSearchRequest'
           x-examples:
             application/json:
               example:
                 value:
-                  query: "polygon delisting"
+                  query: 'polygon delisting'
       responses:
         200:
-          description: "Hybrid search results"
+          description: 'Hybrid search results'
           content:
             application/json:
               schema:
-                $ref: "#/definitions/ApiDefaultReturnTypeHybrid"
+                $ref: '#/definitions/ApiDefaultReturnTypeHybrid'
               examples:
                 success:
                   summary: Success response
@@ -472,92 +465,86 @@ paths:
                       ragCount: 5
                       results:
                         - id: 16311
-                          title: "[ARFC] Recommendation to freeze and set LTV to 0 on low-cap Aave v3 Polygon collateral assets"
+                          title: '[ARFC] Recommendation to freeze and set LTV to 0 on low-cap Aave v3 Polygon collateral assets'
                           digest: "## What is this about?\\n\\nThe discussion is centered on a proposal by @Gauntlet [1] to freeze and set the Loan-to-Value (LTV) to 0 for certain low-cap collateral assets on Aave v3 Polygon, specifically DPI, BAL, CRV, and SUSHI. The goal is to improve capital efficiency by focusing on assets that contribute more to the protocol's reserve growth. The community is involved in providing feedback, and separate snapshots for each collateral asset will be taken to decide on their potential delisting..."
-                          tldr: "Aave v3 Polygon is considering freezing the LTV at 0 for certain low-cap assets (DPI, BAL, CRV, SUSHI) to improve capital efficiency, with community feedback and separate Snapshot votes guiding the decision-making process. While the proposal could enhance reserve growth..."
+                          tldr: 'Aave v3 Polygon is considering freezing the LTV at 0 for certain low-cap assets (DPI, BAL, CRV, SUSHI) to improve capital efficiency, with community feedback and separate Snapshot votes guiding the decision-making process. While the proposal could enhance reserve growth...'
                           created: 1705594672
                           updated: 1707347175
                           score: 13.314973600800743
-                          author: "Gauntlet"
-                          protocol: "aave"
-                          type: "discussion"
-                          appUrl: "https://app.x23.ai/aave/discussions/topic/16311/arfc-recommendation-to-freeze-and-set-ltv-to-0-on-low-cap-aave-v3-polygon-collateral-assets"
-  /officialDocSearch:
+                          author: 'Gauntlet'
+                          protocol: 'aave'
+                          type: 'discussion'
+                          appUrl: 'https://app.x23.ai/aave/discussions/topic/16311/arfc-recommendation-to-freeze-and-set-ltv-to-0-on-low-cap-aave-v3-polygon-collateral-assets'
+  /evaluateOfficialUrl:
     post:
-      summary: "Perform hybrid search on official documents"
+      summary: 'Evaluate an official URL'
       description: |
-        Performs a hybrid search across official documents. When `realtime` is true, search results are filtered with an LLM and candidate URLs are evaluated in real time using the crawling service to answer the query.
+        Given an official URL and query, the API will attempt to answer the query using only data found at the URL.
       parameters:
         - in: body
           name: body
-          description: "Official document hybrid search request payload"
+          description: 'Evaluation request payload'
           required: true
           schema:
-            $ref: "#/definitions/OfficialDocSearchRequest"
+            $ref: '#/definitions/EvaluateOfficialUrlRequest'
           x-examples:
             application/json:
               example:
                 value:
-                  query: "What is the latest Maker governance proposal?"
+                  protocol: 'aave'
+                  url: 'https://example.org/official/update'
+                  question: 'What does this document propose?'
       responses:
         200:
-          description: "Hybrid search results or realtime crawling answer"
+          description: 'Answer and rationale if found'
           content:
             application/json:
               schema:
-                $ref: "#/definitions/ApiDefaultReturnTypeOfficialDocSearch"
+                $ref: '#/definitions/ApiDefaultReturnTypeEvaluateOfficialUrl'
               examples:
-                searchResults:
-                  summary: Search results
-                  description: Hybrid search results when `realtime` is false or no answer was found
+                success:
+                  summary: Answer found
+                  description: The API located an answer at the provided URL.
                   value:
                     status: success
                     result:
-                      keywordCount: 1
-                      ragCount: 5
-                      results:
-                        - id: 123
-                          title: "MakerDAO Governance Update"
-                          digest: "Summary of the latest Maker governance decisions..."
-                          protocol: "makerdao"
-                          type: "officialDoc"
-                          sourceUrl: "https://example.org/official/update"
-                realtimeAnswer:
-                  summary: Realtime answer
-                  description: Direct answer returned from realtime crawling
+                      answer: 'Example answer'
+                      rationale: 'Supporting rationale from the page'
+                noAnswer:
+                  summary: No answer found
+                  description: The API could not find an answer at the provided URL.
                   value:
-                    status: success
+                    status: error
                     result:
-                      answer: "MakerDAO voted to increase the stability fee."
-                      rationale:
-                        - "Information gathered from https://example.org/official/update"
+                      answer: null
+                      rationale: null
   /rawPosts:
     post:
-      summary: "Retrieve raw discussion posts"
+      summary: 'Retrieve raw discussion posts'
       description: |
         Retrieve the raw markdown text of forum posts from a specific discussion
         that were updated after the given minimum unix timestamp.
       parameters:
         - in: body
           name: body
-          description: "Raw posts request payload"
+          description: 'Raw posts request payload'
           required: true
           schema:
-            $ref: "#/definitions/RawPostsRequest"
+            $ref: '#/definitions/RawPostsRequest'
           x-examples:
             application/json:
               example:
                 value:
                   minimumUnix: 1700000000
-                  discussionUrl: "https://forum.example.org/t/example/123"
-                  topicId: "123"
+                  discussionUrl: 'https://forum.example.org/t/example/123'
+                  topicId: '123'
       responses:
         200:
-          description: "Raw posts fetched successfully"
+          description: 'Raw posts fetched successfully'
           content:
             application/json:
               schema:
-                $ref: "#/definitions/ApiDefaultReturnTypeRawPosts"
+                $ref: '#/definitions/ApiDefaultReturnTypeRawPosts'
               examples:
                 success:
                   summary: Success response
@@ -568,7 +555,7 @@ paths:
                       rawPosts: "Post 1 content\\n\\nPost 2 content"
   /timeline:
     post:
-      summary: "Retrieve timeline items"
+      summary: 'Retrieve timeline items'
       description: |
         Retrieve a chronological timeline of related items, based on the provided item object (as returned from the API).
 
@@ -578,25 +565,25 @@ paths:
       parameters:
         - in: body
           name: body
-          description: "Timeline request payload"
+          description: 'Timeline request payload'
           required: true
           schema:
-            $ref: "#/definitions/TimelineRequest"
+            $ref: '#/definitions/TimelineRequest'
           x-examples:
             application/json:
               example:
                 value:
                   ogItem:
                     id: 625
-                    protocol: "aave"
-                    digest: "This proposal seeks formal DAO approval for the already-deployed Aave V3 market on Aptos, marking Aave’s first expansion to a non-EVM blockchain. The deployment leverages Aptos’s high throughput, low fees, and Move language security, aiming to broaden Aave’s reach and improve protocol performance. The initial supported assets are APT, USDC, USDT, and sUSDe, with risk parameters set by Chaos Labs and LlamaRisk."
+                    protocol: 'aave'
+                    digest: 'This proposal seeks formal DAO approval for the already-deployed Aave V3 market on Aptos, marking Aave’s first expansion to a non-EVM blockchain. The deployment leverages Aptos’s high throughput, low fees, and Move language security, aiming to broaden Aave’s reach and improve protocol performance. The initial supported assets are APT, USDC, USDT, and sUSDe, with risk parameters set by Chaos Labs and LlamaRisk.'
       responses:
         200:
-          description: "Timeline items fetched successfully"
+          description: 'Timeline items fetched successfully'
           content:
             application/json:
               schema:
-                $ref: "#/definitions/ApiDefaultReturnTypeTimeline"
+                $ref: '#/definitions/ApiDefaultReturnTypeTimeline'
               examples:
                 success:
                   summary: Success response
@@ -606,19 +593,19 @@ paths:
                     result:
                       timeline:
                         - id: 625
-                          protocol: "aave"
-                          type: "pullRequest"
-                          title: "Aave V3 Aptos Market Deployment"
+                          protocol: 'aave'
+                          type: 'pullRequest'
+                          title: 'Aave V3 Aptos Market Deployment'
                           created: 1740128787
                           updated: 1740569117
-                          appUrl: "https://app.x23.ai/aave/code/bgd-labs/aave-proposals-v3/pr/625"
+                          appUrl: 'https://app.x23.ai/aave/code/bgd-labs/aave-proposals-v3/pr/625'
                         - id: 2843
-                          protocol: "cowdao"
-                          type: "discussion"
+                          protocol: 'cowdao'
+                          type: 'discussion'
                           title: "Grant Application - CoW AMM's & LP Tokens in Tycho"
                           created: 1740091943
                           updated: 1740572762
-                          appUrl: "https://app.x23.ai/cowdao/discussions/topic/2843/grant-application-cow-amms-lp-tokens-in-tycho"
+                          appUrl: 'https://app.x23.ai/cowdao/discussions/topic/2843/grant-application-cow-amms-lp-tokens-in-tycho'
 definitions:
   ApiDefaultReturnType:
     type: object
@@ -630,10 +617,10 @@ definitions:
         type: object
       error:
         type: string
-        description: "Error message, if applicable."
+        description: 'Error message, if applicable.'
   SupportedProtocolsResponse:
     allOf:
-      - $ref: "#/definitions/ApiDefaultReturnType"
+      - $ref: '#/definitions/ApiDefaultReturnType'
     properties:
       result:
         type: object
@@ -645,7 +632,7 @@ definitions:
               properties:
                 name:
                   type: string
-                  description: "The protocol identifier."
+                  description: 'The protocol identifier.'
                 formattedName:
                   type: string
                   description: |
@@ -656,10 +643,10 @@ definitions:
                   type: array
                   items:
                     anyOf:
-                      - $ref: "#/definitions/ApiItemTypes"
+                      - $ref: '#/definitions/ApiItemTypes'
   SupportedItemTypesResponse:
     allOf:
-      - $ref: "#/definitions/ApiDefaultReturnType"
+      - $ref: '#/definitions/ApiDefaultReturnType'
     properties:
       result:
         type: object
@@ -668,56 +655,56 @@ definitions:
             type: array
             items:
               anyOf:
-                - $ref: "#/definitions/ApiItemTypes"
+                - $ref: '#/definitions/ApiItemTypes'
   RecentFeedRequest:
     type: object
     properties:
       maxUnixTimestamp:
         type: number
-        description: "Maximum unix timestamp (in seconds)."
+        description: 'Maximum unix timestamp (in seconds).'
         maximum: 14 days in the past as a unix timestamp
       protocols:
         type: array
-        description: "Protocols to fetch items from. If empty, fetch from all protocols."
+        description: 'Protocols to fetch items from. If empty, fetch from all protocols.'
         items:
           type: string
         default: []
       itemTypes:
         type: array
-        description: "Item types to fetch. If empty, fetch all item types."
+        description: 'Item types to fetch. If empty, fetch all item types.'
         items:
           type: string
         default: []
       limit:
         type: number
-        description: "Maximum number of items to fetch."
+        description: 'Maximum number of items to fetch.'
         default: 100
   TopScoreFeedRequest:
     type: object
     properties:
       maxUnixTimestamp:
         type: number
-        description: "Maximum unix timestamp (in seconds)."
+        description: 'Maximum unix timestamp (in seconds).'
         maximum: 14 days in the past as a unix timestamp
       protocols:
         type: array
-        description: "Protocols to fetch items from. If empty, fetch from all protocols."
+        description: 'Protocols to fetch items from. If empty, fetch from all protocols.'
         items:
           type: string
         default: []
       itemTypes:
         type: array
-        description: "Item types to fetch. If empty, fetch all item types."
+        description: 'Item types to fetch. If empty, fetch all item types.'
         items:
           type: string
         default: []
       limit:
         type: number
-        description: "Maximum number of items to fetch."
+        description: 'Maximum number of items to fetch.'
         default: 100
       scoreThreshold:
         type: number
-        description: "Minimum score threshold for items to be included, between 0 and ~5000"
+        description: 'Minimum score threshold for items to be included, between 0 and ~5000'
         default: 3000
   DigestFeedRequest:
     type: object
@@ -726,17 +713,17 @@ definitions:
     properties:
       protocols:
         type: array
-        description: "Protocols to fetch items from. If empty, fetch from all protocols."
+        description: 'Protocols to fetch items from. If empty, fetch from all protocols.'
         items:
           type: string
         default: []
       timePeriod:
         type: enum
         enum: [daily, weekly, monthly]
-        description: "The selected time period for the digest."
+        description: 'The selected time period for the digest.'
       unixTimestamp:
         type: number
-        description: "Unix timestamp (in seconds) for the start of the time period. When not provided, the current time is used."
+        description: 'Unix timestamp (in seconds) for the start of the time period. When not provided, the current time is used.'
         default: null
   KeywordSearchRequest:
     type: object
@@ -745,20 +732,20 @@ definitions:
     properties:
       query:
         type: string
-        description: "The keyword(s) to search for."
+        description: 'The keyword(s) to search for.'
       sortByRelevance:
         type: boolean
         default: true
-        description: "Sort results by relevance, if false, sort by date."
+        description: 'Sort results by relevance, if false, sort by date.'
       protocols:
         type: array
-        description: "Protocols to fetch items from. If empty, fetch from all protocols."
+        description: 'Protocols to fetch items from. If empty, fetch from all protocols.'
         default: []
         items:
           type: string
       itemTypes:
         type: array
-        description: "Item types to fetch. If empty, fetch all item types."
+        description: 'Item types to fetch. If empty, fetch all item types.'
         default: []
         items:
           type: string
@@ -776,26 +763,26 @@ definitions:
     properties:
       query:
         type: string
-        description: "The query to perform a similarity/vector search on."
+        description: 'The query to perform a similarity/vector search on.'
       similarityThreshold:
         type: number
-        description: "The similarity threshold for the search, between 0 and 1. Higher values are more strictly similar."
+        description: 'The similarity threshold for the search, between 0 and 1. Higher values are more strictly similar.'
         default: 0.4
       protocols:
         type: array
-        description: "Protocols to include in the vector search. If empty, include all protocols."
+        description: 'Protocols to include in the vector search. If empty, include all protocols.'
         default: []
         items:
           type: string
       itemTypes:
         type: array
-        description: "Item types to include in the vector search. If empty, include all item types."
+        description: 'Item types to include in the vector search. If empty, include all item types.'
         default: []
         items:
           type: string
       limit:
         type: number
-        description: "Maximum number of items to fetch."
+        description: 'Maximum number of items to fetch.'
         default: 5
   HybridSearchRequest:
     type: object
@@ -804,53 +791,43 @@ definitions:
     properties:
       query:
         type: string
-        description: "The query to perform a hybrid search on."
+        description: 'The query to perform a hybrid search on.'
       protocols:
         type: array
-        description: "Protocols to include in the hybrid search. If empty, include all protocols."
+        description: 'Protocols to include in the hybrid search. If empty, include all protocols.'
         default: []
         items:
           type: string
       itemTypes:
         type: array
-        description: "Item types to include in the hybrid search. If empty, include all item types."
+        description: 'Item types to include in the hybrid search. If empty, include all item types.'
         default: []
         items:
           type: string
       limit:
         type: number
-        description: "Maximum number of items to fetch."
+        description: 'Maximum number of items to fetch.'
         default: 5
       similarityThreshold:
         type: number
-        description: "The similarity threshold for the RAG/vector search component, between 0 and 1. Higher values are more strictly similar."
+        description: 'The similarity threshold for the RAG/vector search component, between 0 and 1. Higher values are more strictly similar.'
         default: 0.4
-  OfficialDocSearchRequest:
+  EvaluateOfficialUrlRequest:
     type: object
     required:
-      - query
+      - protocol
+      - url
+      - question
     properties:
-      query:
+      protocol:
         type: string
-        description: "The query to perform a hybrid search on."
-      protocols:
-        type: array
-        description: "Protocols to include in the search. If empty, include all protocols."
-        default: []
-        items:
-          type: string
-      limit:
-        type: number
-        description: "Maximum number of items to fetch."
-        default: 5
-      similarityThreshold:
-        type: number
-        description: "The similarity threshold for the search, between 0 and 1. Higher values are more strictly similar."
-        default: 0.4
-      realtime:
-        type: boolean
-        description: "When true, candidate URLs from search results are evaluated in realtime to attempt to answer the query. \nThis will take longer to process (a few minutes!)"
-        default: false
+        description: 'The protocol the URL belongs to.'
+      url:
+        type: string
+        description: 'The official URL to evaluate.'
+      question:
+        type: string
+        description: 'The query to answer using data from the URL.'
   RawPostsRequest:
     type: object
     required:
@@ -860,13 +837,13 @@ definitions:
     properties:
       minimumUnix:
         type: number
-        description: "Minimum unix timestamp (in seconds); only posts updated after this will be returned."
+        description: 'Minimum unix timestamp (in seconds); only posts updated after this will be returned.'
       discussionUrl:
         type: string
-        description: "URL of the discussion thread."
+        description: 'URL of the discussion thread.'
       topicId:
         type: string
-        description: "ID of the discussion topic."
+        description: 'ID of the discussion topic.'
   TimelineRequest:
     type: object
     required:
@@ -874,25 +851,25 @@ definitions:
     properties:
       ogItem:
         type: object
-        description: "The original item to build the timeline from, as returned from the API."
+        description: 'The original item to build the timeline from, as returned from the API.'
         properties:
           anyOf:
-            - $ref: "#/definitions/ApiTopic"
-            - $ref: "#/definitions/ApiPr"
-            - $ref: "#/definitions/ApiSnapshot"
-            - $ref: "#/definitions/ApiOnchain"
-            - $ref: "#/definitions/ApiCodeFile"
+            - $ref: '#/definitions/ApiTopic'
+            - $ref: '#/definitions/ApiPr'
+            - $ref: '#/definitions/ApiSnapshot'
+            - $ref: '#/definitions/ApiOnchain'
+            - $ref: '#/definitions/ApiCodeFile'
       restrictToProtocol:
         type: boolean
-        description: "If true, restrict the timeline to the same protocol as the original item. If false, include all protocols."
+        description: 'If true, restrict the timeline to the same protocol as the original item. If false, include all protocols.'
         default: true
       scoreMatch:
         type: number
-        description: "The similarity score to match items against. If provided, only items with a score greater than or equal to this value will be included in the timeline. Max score is 1.0"
+        description: 'The similarity score to match items against. If provided, only items with a score greater than or equal to this value will be included in the timeline. Max score is 1.0'
         default: 0.76
   ApiDefaultReturnTypeRecent:
     allOf:
-      - $ref: "#/definitions/ApiDefaultReturnType"
+      - $ref: '#/definitions/ApiDefaultReturnType'
     properties:
       result:
         type: object
@@ -901,14 +878,14 @@ definitions:
             type: array
             items:
               anyOf:
-                - $ref: "#/definitions/ApiTopic"
-                - $ref: "#/definitions/ApiPr"
-                - $ref: "#/definitions/ApiSnapshot"
-                - $ref: "#/definitions/ApiOnchain"
-                - $ref: "#/definitions/ApiCodeFile"
+                - $ref: '#/definitions/ApiTopic'
+                - $ref: '#/definitions/ApiPr'
+                - $ref: '#/definitions/ApiSnapshot'
+                - $ref: '#/definitions/ApiOnchain'
+                - $ref: '#/definitions/ApiCodeFile'
   ApiDefaultReturnTypeTop:
     allOf:
-      - $ref: "#/definitions/ApiDefaultReturnType"
+      - $ref: '#/definitions/ApiDefaultReturnType'
     properties:
       result:
         type: object
@@ -917,14 +894,14 @@ definitions:
             type: array
             items:
               anyOf:
-                - $ref: "#/definitions/ApiTopic"
-                - $ref: "#/definitions/ApiPr"
-                - $ref: "#/definitions/ApiSnapshot"
-                - $ref: "#/definitions/ApiOnchain"
-                - $ref: "#/definitions/ApiCodeFile"
+                - $ref: '#/definitions/ApiTopic'
+                - $ref: '#/definitions/ApiPr'
+                - $ref: '#/definitions/ApiSnapshot'
+                - $ref: '#/definitions/ApiOnchain'
+                - $ref: '#/definitions/ApiCodeFile'
   ApiDefaultReturnTypeDigest:
     allOf:
-      - $ref: "#/definitions/ApiDefaultReturnType"
+      - $ref: '#/definitions/ApiDefaultReturnType'
     properties:
       result:
         type: object
@@ -936,26 +913,26 @@ definitions:
               properties:
                 protocol:
                   type: string
-                  description: "The protocol identifier."
+                  description: 'The protocol identifier.'
                 id:
                   type: string
-                  description: "The ID of the digest, i.e. the date."
+                  description: 'The ID of the digest, i.e. the date.'
                 updated:
                   type: number
-                  description: "The unix timestamp when the digest was last updated."
+                  description: 'The unix timestamp when the digest was last updated.'
                 topScores:
                   type: object
-                  description: "The digest that only takes into account the top scoring items. Note that in some cases this may be the same as the latest digest."
+                  description: 'The digest that only takes into account the top scoring items. Note that in some cases this may be the same as the latest digest.'
                   allOf:
-                    - $ref: "#/definitions/ApiDigestIndividualSummary"
+                    - $ref: '#/definitions/ApiDigestIndividualSummary'
                 latest:
                   type: object
-                  description: "The digest that includes the latest chronological items, regardless of score. Note that in some cases this may be the same as the topScores digest."
+                  description: 'The digest that includes the latest chronological items, regardless of score. Note that in some cases this may be the same as the topScores digest.'
                   allOf:
-                    - $ref: "#/definitions/ApiDigestIndividualSummary"
+                    - $ref: '#/definitions/ApiDigestIndividualSummary'
   ApiDefaultReturnTypeKeyword:
     allOf:
-      - $ref: "#/definitions/ApiDefaultReturnType"
+      - $ref: '#/definitions/ApiDefaultReturnType'
     properties:
       result:
         type: object
@@ -964,15 +941,15 @@ definitions:
             type: array
             items:
               anyOf:
-                - $ref: "#/definitions/ApiTopic"
-                - $ref: "#/definitions/ApiPr"
-                - $ref: "#/definitions/ApiSnapshot"
-                - $ref: "#/definitions/ApiOnchain"
-                - $ref: "#/definitions/ApiCodeFile"
-                - $ref: "#/definitions/ApiOfficialDoc"
+                - $ref: '#/definitions/ApiTopic'
+                - $ref: '#/definitions/ApiPr'
+                - $ref: '#/definitions/ApiSnapshot'
+                - $ref: '#/definitions/ApiOnchain'
+                - $ref: '#/definitions/ApiCodeFile'
+                - $ref: '#/definitions/ApiOfficialDoc'
   ApiDefaultReturnTypeRag:
     allOf:
-      - $ref: "#/definitions/ApiDefaultReturnType"
+      - $ref: '#/definitions/ApiDefaultReturnType'
     properties:
       result:
         type: object
@@ -981,92 +958,78 @@ definitions:
             type: array
             items:
               anyOf:
-                - $ref: "#/definitions/ApiTopic"
-                - $ref: "#/definitions/ApiPr"
-                - $ref: "#/definitions/ApiSnapshot"
-                - $ref: "#/definitions/ApiOnchain"
-                - $ref: "#/definitions/ApiCodeFile"
-                - $ref: "#/definitions/ApiOfficialDoc"
+                - $ref: '#/definitions/ApiTopic'
+                - $ref: '#/definitions/ApiPr'
+                - $ref: '#/definitions/ApiSnapshot'
+                - $ref: '#/definitions/ApiOnchain'
+                - $ref: '#/definitions/ApiCodeFile'
+                - $ref: '#/definitions/ApiOfficialDoc'
   ApiDefaultReturnTypeHybrid:
     allOf:
-      - $ref: "#/definitions/ApiDefaultReturnType"
+      - $ref: '#/definitions/ApiDefaultReturnType'
     properties:
       result:
         type: object
         properties:
           keywordCount:
             type: number
-            description: "The number of keyword search results found."
+            description: 'The number of keyword search results found.'
           ragCount:
             type: number
-            description: "The number of RAG/vector search results found."
+            description: 'The number of RAG/vector search results found.'
           results:
             type: array
-            description: "The combined deduplicated list of keyword and RAG search results."
+            description: 'The combined deduplicated list of keyword and RAG search results.'
             items:
               anyOf:
-                - $ref: "#/definitions/ApiTopic"
-                - $ref: "#/definitions/ApiPr"
-                - $ref: "#/definitions/ApiSnapshot"
-                - $ref: "#/definitions/ApiOnchain"
-                - $ref: "#/definitions/ApiCodeFile"
-                - $ref: "#/definitions/ApiOfficialDoc"
-  ApiDefaultReturnTypeOfficialDocSearch:
+                - $ref: '#/definitions/ApiTopic'
+                - $ref: '#/definitions/ApiPr'
+                - $ref: '#/definitions/ApiSnapshot'
+                - $ref: '#/definitions/ApiOnchain'
+                - $ref: '#/definitions/ApiCodeFile'
+                - $ref: '#/definitions/ApiOfficialDoc'
+  ApiDefaultReturnTypeEvaluateOfficialUrl:
     allOf:
-      - $ref: "#/definitions/ApiDefaultReturnType"
+      - $ref: '#/definitions/ApiDefaultReturnType'
     properties:
       result:
         type: object
         properties:
-          keywordCount:
-            type: number
-            description: "The number of keyword search results found."
-          ragCount:
-            type: number
-            description: "The number of RAG/vector search results found."
-          results:
-            type: array
-            items:
-              $ref: "#/definitions/ApiOfficialDoc"
           answer:
             type: string
-            description: "Direct answer from realtime crawling when available."
+            nullable: true
+            description: 'Answer to the query, if found.'
           rationale:
-            type: array
-            description: "Reasoning steps from the crawling agent."
-            items:
-              type: string
-          status:
             type: string
-            description: "Indicates realtime crawling could not answer the question."
-            enum: [not_found]
+            nullable: true
+            description: 'Explanation or supporting text for the answer.'
   ApiDefaultReturnTypeRawPosts:
     allOf:
-      - $ref: "#/definitions/ApiDefaultReturnType"
+      - $ref: '#/definitions/ApiDefaultReturnType'
     properties:
       result:
         type: object
         properties:
           rawPosts:
             type: string
-            description: "Concatenated raw text of discussion posts."
+            description: 'Concatenated raw text of discussion posts.'
   ApiDefaultReturnTypeTimeline:
     allOf:
-      - $ref: "#/definitions/ApiDefaultReturnType"
+      - $ref: '#/definitions/ApiDefaultReturnType'
     properties:
       result:
         type: object
         properties:
           timeline:
             type: array
-            description: "An array of timeline items in chronological order, based on the original item."
+            description: 'An array of timeline items in chronological order, based on the original item.'
             items:
               anyOf:
-                - $ref: "#/definitions/ApiTopic"
-                - $ref: "#/definitions/ApiPr"
-                - $ref: "#/definitions/ApiSnapshot"
-                - $ref: "#/definitions/ApiOnchain"
-                - $ref: "#/definitions/ApiCodeFile"
+                - $ref: '#/definitions/ApiTopic'
+                - $ref: '#/definitions/ApiPr'
+                - $ref: '#/definitions/ApiSnapshot'
+                - $ref: '#/definitions/ApiOnchain'
+                - $ref: '#/definitions/ApiCodeFile'
   ApiTopic:
     type: object
     properties:
@@ -1074,44 +1037,44 @@ definitions:
         type: number
       title:
         type: string
-        description: "The title of the topic the author used."
+        description: 'The title of the topic the author used.'
       headline:
         type: string
-        description: "The AI generated headline for the topic."
+        description: 'The AI generated headline for the topic.'
       digest:
         type: string
-        description: "The AI generated digest for the entire topic, including highlights of important comments."
+        description: 'The AI generated digest for the entire topic, including highlights of important comments.'
       tldr:
         type: string
-        description: "The AI generated short summary of the topic."
+        description: 'The AI generated short summary of the topic.'
       created:
         type: number
-        description: "The unix timestamp when the topic was created."
+        description: 'The unix timestamp when the topic was created.'
       updated:
         type: number
-        description: "The unix timestamp when the topic was last updated."
+        description: 'The unix timestamp when the topic was last updated.'
       score:
         type: number
-        description: "The score of the topic, calculated based on a combination of factors (e.g. views, replies, author weight, contributors)."
+        description: 'The score of the topic, calculated based on a combination of factors (e.g. views, replies, author weight, contributors).'
       author:
         type: string
         description: "The topic author's username."
       protocol:
         type: string
-        description: "The protocol the topic belongs to."
+        description: 'The protocol the topic belongs to.'
       type:
         type: string
-        default: "discussion"
-        description: "Used to differentiate between different types of items types."
+        default: 'discussion'
+        description: 'Used to differentiate between different types of items types.'
       appUrl:
         type: string
-        description: "The URL to view the topic on the x23.ai app."
+        description: 'The URL to view the topic on the x23.ai app.'
       sourceUrl:
         type: string
-        description: "The original URL of the topic. This is used to link back to the original source."
+        description: 'The original URL of the topic. This is used to link back to the original source.'
       firstSeen:
         type: number
-        description: "The unix timestamp when the topic was first seen in our systems."
+        description: 'The unix timestamp when the topic was first seen in our systems.'
 
   ApiPr:
     type: object
@@ -1120,54 +1083,54 @@ definitions:
         type: number
       title:
         type: string
-        description: "The title of the pull request."
+        description: 'The title of the pull request.'
       headline:
         type: string
-        description: "The AI generated headline for the pull request."
+        description: 'The AI generated headline for the pull request.'
       digest:
         type: string
-        description: "The AI generated digest for the entire pull request, including given description and details of code changes."
+        description: 'The AI generated digest for the entire pull request, including given description and details of code changes.'
       tldr:
         type: string
-        description: "The AI generated short summary of the pull request."
+        description: 'The AI generated short summary of the pull request.'
       created:
         type: number
-        description: "The unix timestamp when the pull request was created."
+        description: 'The unix timestamp when the pull request was created.'
       updated:
         type: number
-        description: "The unix timestamp when the pull request was last updated."
+        description: 'The unix timestamp when the pull request was last updated.'
       merged:
         type: number
         nullable: true
-        description: "The unix timestamp when the pull request was merged, if applicable."
+        description: 'The unix timestamp when the pull request was merged, if applicable.'
       score:
         type: number
-        description: "The score of the pull request, calculated based on a combination of factors (e.g. author weight, contributors, modifications)."
+        description: 'The score of the pull request, calculated based on a combination of factors (e.g. author weight, contributors, modifications).'
       state:
         type: string
-        description: "The state of the pull request, e.g. open, closed, merged."
+        description: 'The state of the pull request, e.g. open, closed, merged.'
       owner:
         type: string
-        description: "The owner of the repository."
+        description: 'The owner of the repository.'
       repo:
         type: string
-        description: "The repository the pull request belongs to."
+        description: 'The repository the pull request belongs to.'
       protocol:
         type: string
-        description: "The protocol the pull request belongs to."
+        description: 'The protocol the pull request belongs to.'
       type:
         type: string
-        default: "pullRequest"
-        description: "Used to differentiate between different types of items types."
+        default: 'pullRequest'
+        description: 'Used to differentiate between different types of items types.'
       appUrl:
         type: string
-        description: "The URL to view the pull request on the x23.ai app."
+        description: 'The URL to view the pull request on the x23.ai app.'
       sourceUrl:
         type: string
-        description: "The original URL of the pull request. This is used to link back to the original source."
+        description: 'The original URL of the pull request. This is used to link back to the original source.'
       firstSeen:
         type: number
-        description: "The unix timestamp when the topic was first seen in our systems."
+        description: 'The unix timestamp when the topic was first seen in our systems.'
 
   ApiCodeFile:
     type: object
@@ -1176,38 +1139,38 @@ definitions:
         type: string
       title:
         type: string
-        description: "The title of the code file."
+        description: 'The title of the code file.'
       digest:
         type: string
-        description: "The AI generated digest for the code file."
+        description: 'The AI generated digest for the code file.'
       sha:
         type: string
-        description: "The SHA of the code file."
+        description: 'The SHA of the code file.'
       updated:
         type: number
-        description: "The unix timestamp when the code file was last updated *in our systems*."
+        description: 'The unix timestamp when the code file was last updated *in our systems*.'
       protocol:
         type: string
-        description: "The protocol the code file belongs to."
+        description: 'The protocol the code file belongs to.'
       owner:
         type: string
-        description: "The owner of the repository."
+        description: 'The owner of the repository.'
       repo:
         type: string
-        description: "The repository the code file belongs to."
+        description: 'The repository the code file belongs to.'
       type:
         type: string
-        default: "code"
-        description: "Used to differentiate between different types of items types."
+        default: 'code'
+        description: 'Used to differentiate between different types of items types.'
       appUrl:
         type: string
-        description: "The URL to view the code file on the x23.ai app."
+        description: 'The URL to view the code file on the x23.ai app.'
       sourceUrl:
         type: string
-        description: "The original URL of the code file. This is used to link back to the original source."
+        description: 'The original URL of the code file. This is used to link back to the original source.'
       firstSeen:
         type: number
-        description: "The unix timestamp when the topic was first seen in our systems."
+        description: 'The unix timestamp when the topic was first seen in our systems.'
 
   ApiSnapshot:
     type: object
@@ -1216,94 +1179,94 @@ definitions:
         type: string
       title:
         type: string
-        description: "The title of the snapshot proposal."
+        description: 'The title of the snapshot proposal.'
       headline:
         type: string
-        description: "The AI generated headline for the snapshot proposal."
+        description: 'The AI generated headline for the snapshot proposal.'
       digest:
         type: string
-        description: "The AI generated digest for the entire snapshot proposal, including details of the proposal and vote results."
+        description: 'The AI generated digest for the entire snapshot proposal, including details of the proposal and vote results.'
       tldr:
         type: string
-        description: "The AI generated short summary of the snapshot proposal."
+        description: 'The AI generated short summary of the snapshot proposal.'
       start:
         type: number
-        description: "The unix timestamp when the snapshot proposal starts."
+        description: 'The unix timestamp when the snapshot proposal starts.'
       end:
         type: number
-        description: "The unix timestamp when the snapshot proposal ends."
+        description: 'The unix timestamp when the snapshot proposal ends.'
       score:
         type: number
-        description: "The score of the snapshot proposal, calculated based on a combination of factors (e.g. votes, differential between votes)."
+        description: 'The score of the snapshot proposal, calculated based on a combination of factors (e.g. votes, differential between votes).'
       protocol:
         type: string
-        description: "The protocol the snapshot proposal belongs to."
+        description: 'The protocol the snapshot proposal belongs to.'
       type:
         type: string
-        default: "snapshot"
-        description: "Used to differentiate between different types of items types."
+        default: 'snapshot'
+        description: 'Used to differentiate between different types of items types.'
       appUrl:
         type: string
-        description: "The URL to view the snapshot proposal on the x23.ai app."
+        description: 'The URL to view the snapshot proposal on the x23.ai app.'
       sourceUrl:
         type: string
-        description: "The original URL of the snapshot proposal. This is used to link back to the original source."
+        description: 'The original URL of the snapshot proposal. This is used to link back to the original source.'
       firstSeen:
         type: number
-        description: "The unix timestamp when the topic was first seen in our systems."
+        description: 'The unix timestamp when the topic was first seen in our systems.'
 
   ApiOnchain:
     type: object
     properties:
       id:
         type: string
-        description: "The ID of the onchain proposal, as identified onchain."
+        description: 'The ID of the onchain proposal, as identified onchain.'
       title:
         type: string
-        description: "The title of the onchain proposal."
+        description: 'The title of the onchain proposal.'
       headline:
         type: string
-        description: "The AI generated headline for the onchain proposal."
+        description: 'The AI generated headline for the onchain proposal.'
       digest:
         type: string
-        description: "The AI generated digest for the onchain proposal description and details."
+        description: 'The AI generated digest for the onchain proposal description and details.'
       voteResults:
         type: string
-        description: "The AI generated digest for the aggregated vote results, when vote results are available."
+        description: 'The AI generated digest for the aggregated vote results, when vote results are available.'
       voteReasons:
         type: string
-        description: "The AI generated digest for the aggregated reasons behind the vote results, when vote reasons are available onchain."
+        description: 'The AI generated digest for the aggregated reasons behind the vote results, when vote reasons are available onchain.'
       tldr:
         type: string
-        description: "The AI generated short summary of the onchain proposal, including all vote results when available."
+        description: 'The AI generated short summary of the onchain proposal, including all vote results when available.'
       start:
         type: number
-        description: "The unix timestamp when the onchain proposal starts."
+        description: 'The unix timestamp when the onchain proposal starts.'
       end:
         type: number
-        description: "The unix timestamp when the onchain proposal ends."
+        description: 'The unix timestamp when the onchain proposal ends.'
       score:
         type: number
-        description: "The score of the onchain proposal, calculated based on a combination of factors (e.g. votes, differential between votes)."
+        description: 'The score of the onchain proposal, calculated based on a combination of factors (e.g. votes, differential between votes).'
       protocol:
         type: string
-        description: "The protocol the onchain proposal belongs to."
+        description: 'The protocol the onchain proposal belongs to.'
       governor:
         type: string
-        description: "The identifier for the governance system of the onchain proposal."
+        description: 'The identifier for the governance system of the onchain proposal.'
       type:
         type: string
-        default: "onchain"
-        description: "Used to differentiate between different types of items types."
+        default: 'onchain'
+        description: 'Used to differentiate between different types of items types.'
       appUrl:
         type: string
-        description: "The URL to view the onchain proposal on the x23.ai app."
+        description: 'The URL to view the onchain proposal on the x23.ai app.'
       sourceUrl:
         type: string
-        description: "The original URL of the onchain proposal. This is used to link back to the original source."
+        description: 'The original URL of the onchain proposal. This is used to link back to the original source.'
       firstSeen:
         type: number
-        description: "The unix timestamp when the topic was first seen in our systems."
+        description: 'The unix timestamp when the topic was first seen in our systems.'
 
   ApiOfficialDoc:
     type: object
@@ -1312,42 +1275,42 @@ definitions:
         type: string
       title:
         type: string
-        description: "The title of the official reference."
+        description: 'The title of the official reference.'
       digest:
         type: string
-        description: "The AI generated digest for the official reference."
+        description: 'The AI generated digest for the official reference.'
       protocol:
         type: string
-        description: "The protocol the official reference belongs to."
+        description: 'The protocol the official reference belongs to.'
       type:
         type: string
-        default: "officialDoc"
-        description: "Used to differentiate between different types of items types."
+        default: 'officialDoc'
+        description: 'Used to differentiate between different types of items types.'
       sourceUrl:
         type: string
-        description: "The original URL of the official reference. This is used to link back to the original source."
+        description: 'The original URL of the official reference. This is used to link back to the original source.'
       relatedLinks:
         type: array
-        description: "Related links that have been infered to be related to the official reference topic and mentioned by the official reference. These may be useful when further information/crawling is needed."
+        description: 'Related links that have been infered to be related to the official reference topic and mentioned by the official reference. These may be useful when further information/crawling is needed.'
         items:
           type: string
       firstSeen:
         type: number
-        description: "The unix timestamp when the topic was first seen in our systems."
+        description: 'The unix timestamp when the topic was first seen in our systems.'
 
   ApiDigestIndividualSummary:
     type: object
     properties:
       digest:
         type: string
-        description: "The digest summary for the time period and type (topScores vs latest)."
+        description: 'The digest summary for the time period and type (topScores vs latest).'
       references:
         type: array
-        description: "The references used in the digest summary. They are ordered by mentions in the digest, e.g. [1] corresponds to the first element of this array."
+        description: 'The references used in the digest summary. They are ordered by mentions in the digest, e.g. [1] corresponds to the first element of this array.'
         items:
           type: string
 
   ApiItemTypes:
     type: string
-    description: "The supported item types for the protocol."
+    description: 'The supported item types for the protocol.'
     enum: [discussion, snapshot, onchain, code, pullRequest]

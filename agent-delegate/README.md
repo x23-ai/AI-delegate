@@ -23,7 +23,7 @@ This package orchestrates multi‑agent evaluation of governance proposals (plan
   - Fact Checker: `ASSUMPTION_EXTRACT_SYSTEM_SUFFIX`, `ARITHMETIC_EXTRACT_SYSTEM_SUFFIX`, `CLAIM_CLASSIFY_SYSTEM_SUFFIX` (src/agents/factChecker.ts)
 
 - Tool prompts/schemas (central): `src/tools/definitions.ts`
-  - `SEARCH_TOOL_SELECTOR_SYSTEM_PROMPT` + `SEARCH_TOOL_SELECTOR_SCHEMA` – pick search tool: `keyword`, `vector`, `hybrid`, `officialHybrid`.
+  - `SEARCH_TOOL_SELECTOR_SYSTEM_PROMPT` + `SEARCH_TOOL_SELECTOR_SCHEMA` – pick search tool: `keyword`, `vector`, `hybrid`.
   - `SEED_SEARCH_SYSTEM_PROMPT` + `SEED_SEARCH_SCHEMA` – produce a concise, search-optimized seed query.
   - `RAW_POSTS_DECISION_PROMPT` + `RAW_POSTS_DECISION_SCHEMA` – decide if raw discussion posts are needed for added context.
   - `QUERY_REWRITE_SYSTEM_PROMPT` + `QUERY_REWRITE_SCHEMA` – rewrite search queries concisely (enabled by default; set `FACT_ENABLE_QUERY_REWRITE=0` to disable).
@@ -33,14 +33,14 @@ This package orchestrates multi‑agent evaluation of governance proposals (plan
 - x23 client mapping: `src/tools/x23.ts`
   - Maps API responses to compact `DocChunk` objects using only relevant fields per `agent-delegate/x23ai API spec.yaml`:
     - `id`, `title`, `uri` (`appUrl`/`sourceUrl`), `snippet` (`tldr`/`digest`/`headline`), `source` (`type`/`protocol`), `publishedAt`, `score`.
-  - Search tools return digests/snippets; `officialHybridAnswer` returns `{ answer, citations }`.
+  - Search tools return digests/snippets; `evaluateOfficialUrl` evaluates a single official URL and returns `{ answer }`.
   - `rawPosts` is a separate endpoint to fetch full forum thread content when necessary.
 
 ### Retrieval Pattern: Search → (Optional) Detail
 
-- Search tools (`keyword`, `vector`, `hybrid`, `officialHybrid` with `realtime=false`) retrieve high-signal digests/snippets and citations.
+- Search tools (`keyword`, `vector`, `hybrid`) retrieve high-signal digests/snippets and citations.
 - If a discussion citation needs more context, the agent can call `rawPosts` to fetch the thread’s raw content.
-- If an official-doc citation needs more detail than the digest, the agent can request an official-doc detail answer (internally calls `officialHybridAnswer` with `realtime=true`) and feed the response back into classification.
+- If an official-doc citation needs more detail than the digest, the agent can call `evaluateOfficialUrl` with `{ protocol, url, question }` to extract an answer directly from the cited URL and feed the response back into classification.
 - These detail steps are decided by the LLM and only run when needed (post-citation), keeping calls minimal and focused.
 
 ## Shared Evidence Toolkit
@@ -84,6 +84,8 @@ Recommended/Configurable:
 - `LLM_PROVIDER`: `openai` (default) or `stub`.
 - `OPENAI_MODEL`: OpenAI Responses model. Default: `gpt-5-mini` (reasoning; temperature ignored). Examples: `gpt-5-mini`, `gpt-4o-mini`.
 - `DEBUG`: set to `1` (or `true`) to log raw LLM responses (schema, JSON, and text) and raw x23 API JSON responses for easier debugging.
+ - `X23_LOG_PARAMS_INFO`: when `1`/true/yes, log x23 request params (sanitized/trimmed) at info level. By default, only method/path are logged at info.
+ - `DEBUG_LEVEL`: set to `2` to include full x23 request bodies at debug level; `1` includes raw JSON responses at debug level.
 - `X23_PROTOCOLS`: Comma-separated list of default protocols to search. Default: `optimism`.
 - `X23_DISCUSSION_URL`: Default forum base URL for rawPosts. Default: `https://gov.optimism.io`.
 - `ORCH_MAX_ITERS`: Max refinement iterations per stage (default `2`).

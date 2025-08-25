@@ -11,6 +11,7 @@ import { TraceBuilder } from '../trace.js';
 import { X23Client } from '../tools/x23.js';
 import type { LLMClient } from '../llm/index.js';
 import type { AlchemyPricesClient } from '../tools/prices.js';
+import type { CuratedSourceQAClient } from '../tools/curated.js';
 
 export type AgentKind =
   | 'conductor'
@@ -28,6 +29,7 @@ export interface AgentContext {
   cache?: Map<string, unknown>;
   llm?: LLMClient;
   prices?: AlchemyPricesClient;
+  curatedQA?: CuratedSourceQAClient;
 }
 
 export interface Agent<TOutput> {

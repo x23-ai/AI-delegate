@@ -14,8 +14,12 @@ import {
   OFFICIAL_FIRST_DECISION_SCHEMA,
   PRICE_DECISION_PROMPT,
   PRICE_DECISION_SCHEMA,
+  CURATED_SOURCE_DECISION_PROMPT,
+  CURATED_SOURCE_DECISION_SCHEMA,
 } from './definitions.js';
+import { CURATED_SOURCES } from './curatedCatalog.js';
 import { AVAILABLE_ITEM_TYPES, AVAILABLE_PROTOCOLS, DISCUSSION_URL } from '../utils/x23Config.js';
+import { log, colors } from '../utils/logger.js';
 
 // Small helper to prefix prompts with the agent role text when available
 function sys(role: string | undefined, suffix: string): string {
@@ -93,7 +97,18 @@ export async function selectSearchTool(
       }
     } catch {}
   }
-  return sanitizeToolPlan(plan);
+  const finalPlan = sanitizeToolPlan(plan);
+  try {
+    log.info(colors.magenta('LLM decided to use search tool'), {
+      tool: finalPlan?.tool,
+      query: finalPlan?.query,
+      limit: finalPlan?.limit,
+      similarityThreshold: finalPlan?.similarityThreshold,
+      protocols: finalPlan?.protocols,
+      itemTypes: finalPlan?.itemTypes,
+    });
+  } catch {}
+  return finalPlan;
 }
 
 export async function runSearchTool(
@@ -229,6 +244,9 @@ export async function maybeExpandWithRawPosts(
       if (m) topicId = m[1];
     }
     if (!topicId) return undefined;
+    try {
+      log.info(colors.magenta('LLM decided to use tool rawPosts'), { topicId, minimumUnix: decision.minimumUnix });
+    } catch {}
     const posts = await ctx.x23.getDiscussionPosts({
       discussionUrl,
       topicId,
@@ -265,12 +283,17 @@ export async function maybeExpandWithOfficialDetail(
     );
     if (!decision.useOfficialDetail) return undefined;
     const q = (decision.question || claim).slice(0, 256);
-    const ans = await ctx.x23.officialHybridAnswer({
-      query: q,
-      topK: 5,
-      protocols: AVAILABLE_PROTOCOLS,
-      similarityThreshold: 0.4,
-      realtime: true,
+    const target =
+      docs.find((d) => (d.source || '').toLowerCase() === 'officialdoc' && d.uri) ||
+      docs.find((d) => d.uri);
+    if (!target?.uri) return undefined;
+    try {
+      log.info(colors.magenta('LLM decided to use tool officialDetail'), { url: target.uri, question: q });
+    } catch {}
+    const ans = await ctx.x23.evaluateOfficialUrl({
+      protocol: AVAILABLE_PROTOCOLS[0] || 'optimism',
+      url: target.uri,
+      question: q,
     });
     const doc: DocChunk = {
       id: 'official-detail',
@@ -309,6 +332,18 @@ export async function maybeExpandWithPrice(
       { schemaName: 'priceDecision', maxOutputTokens: 1200, difficulty: 'normal' }
     );
     if (!dec?.usePrice) return undefined;
+    try {
+      log.info(colors.magenta('LLM decided to use tool price'), {
+        mode: dec.mode,
+        symbol: dec.symbol,
+        network: dec.network,
+        address: dec.address,
+        currency: dec.currency,
+        startTime: dec.startTime,
+        endTime: dec.endTime,
+        interval: dec.interval,
+      });
+    } catch {}
     const currency = (dec.currency || 'USD') as any;
     if (dec.mode === 'historical' && (dec.startTime || dec.endTime)) {
       const series = await ctx.prices.getHistoricalSeries({
@@ -344,6 +379,48 @@ export async function maybeExpandWithPrice(
     const snippet = `price=${spot.price} @ ${spot.at}`;
     const doc: DocChunk = { id: `price-spot-${dec.symbol || dec.address || 'asset'}`, title, snippet, source: 'price' };
     return doc;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function maybeExpandWithCuratedSource(
+  ctx: AgentContext,
+  llm: LLMClient,
+  rolePrompt: string | undefined,
+  claim: string
+): Promise<DocChunk[] | undefined> {
+  try {
+    const client: any = (ctx as any).curatedQA;
+    if (!client || !client.isConfigured || !client.isConfigured()) return undefined;
+    // Prepare a compact catalog for the LLM to select from
+    const catalog = CURATED_SOURCES.map((s) => ({ id: s.id, url: s.url, scope: s.scope, answers: s.answers, limits: s.limits, freshness: s.freshness })).slice(0, 20);
+    const body = `Claim: ${claim}\nCatalog: ${JSON.stringify(catalog)}`;
+  const dec = await llm.extractJSON<{
+      useCuratedSource: boolean;
+      sourceId?: string;
+      question?: string;
+      reason?: string;
+    }>(
+      sys(rolePrompt, CURATED_SOURCE_DECISION_PROMPT),
+      body,
+      CURATED_SOURCE_DECISION_SCHEMA as any,
+      { schemaName: 'curatedSourceDecision', maxOutputTokens: 1200, difficulty: 'normal' }
+    );
+    if (!dec?.useCuratedSource || !dec.sourceId) return undefined;
+    const q = (dec.question || claim).slice(0, 256);
+    try { log.info(colors.magenta('LLM decided to use tool curatedSource'), { sourceId: dec.sourceId, question: q }); } catch {}
+    const ans = await client.answerFromSource({ sourceId: dec.sourceId, question: q });
+    const docs: DocChunk[] = [];
+    if (ans.answer) {
+      docs.push({ id: `curated:${dec.sourceId}:answer`, title: `Curated: ${dec.sourceId}`, snippet: String(ans.answer).slice(0, 1200), uri: ans.usedUrl, source: 'curated' });
+    }
+    if (Array.isArray(ans.citations)) {
+      ans.citations.slice(0, 5).forEach((c: any, i: number) => {
+        docs.push({ id: `curated:${dec.sourceId}:cite:${i}`, title: c.title || 'Citation', uri: c.url, snippet: c.snippet, source: 'curated' });
+      });
+    }
+    return docs.length ? docs : undefined;
   } catch {
     return undefined;
   }
@@ -396,6 +473,7 @@ export async function findEvidenceForClaim(
   const preferOfficialAll = String(process.env.OFFICIAL_FIRST_ALL || '').toLowerCase();
   let preferOfficial =
     preferOfficialAll === '1' || preferOfficialAll === 'true' || preferOfficialAll === 'yes';
+  let preferReason: 'env' | 'llm' | 'heuristic' | 'unset' = preferOfficial ? 'env' : 'unset';
   if (!preferOfficial) {
     try {
       const dec = await llm.extractJSON<{ preferOfficialFirst: boolean }>(
@@ -405,11 +483,16 @@ export async function findEvidenceForClaim(
         { schemaName: 'officialFirstDecision', maxOutputTokens: 1000, difficulty: 'normal' }
       );
       preferOfficial = !!dec?.preferOfficialFirst;
+      preferReason = 'llm';
     } catch {
       // fallback heuristic if LLM decision fails
       preferOfficial = isPolicyLikeClaim(claim) || (hints || []).some((h) => isPolicyHint(h));
+      preferReason = 'heuristic';
     }
   }
+  try {
+    log.info(colors.magenta('Official-first decision'), { preferOfficialFirst: preferOfficial, source: preferReason });
+  } catch {}
   if (preferOfficial) {
     try {
       // Optional: rewrite the query for concise, search-optimized form
@@ -432,28 +515,41 @@ export async function findEvidenceForClaim(
         if (after && after.length <= before.length && preserves) q = after;
       } catch {}
 
-      const ans = await ctx.x23.officialHybridAnswer({
+      // Prefer official docs via hybrid search restricted to officialDoc
+      const pairs = await (ctx.x23 as any).hybridSearchRaw({
         query: q,
-        protocols: AVAILABLE_PROTOCOLS,
         topK: 6,
+        protocols: AVAILABLE_PROTOCOLS,
+        itemTypes: ['officialDoc'],
         similarityThreshold: 0.4,
-        // realtime disabled for faster citations-only retrieval
-        realtime: false,
       });
-      const docsOff = (ans.citations || []).slice(0, 6);
+      const docsOff = pairs.map((p: any) => p.doc).slice(0, 6);
       attempts.push({ tool: 'officialDoc', query: claim, resultCount: docsOff.length });
       if (docsOff.length > 0) {
-        // Represent the detailed answer as an additional pseudo-doc, then citations
-        const detail: DocChunk = {
-          id: 'official-detail',
-          title: 'Official doc detail',
-          snippet: ans.answer?.slice(0, 1000),
-          source: 'officialDoc',
-        };
-        let docs = [detail, ...docsOff];
+        // Optionally include a detail answer from the top official URL
+        let detail: DocChunk | undefined;
+        try {
+          const top = docsOff[0];
+          if (top?.uri) {
+            const evalAns = await ctx.x23.evaluateOfficialUrl({
+              protocol: AVAILABLE_PROTOCOLS[0] || 'optimism',
+              url: top.uri,
+              question: q,
+            });
+            if (evalAns?.answer) {
+              detail = {
+                id: 'official-detail',
+                title: 'Official doc detail',
+                snippet: String(evalAns.answer).slice(0, 1000),
+                source: 'officialDoc',
+              };
+            }
+          }
+        } catch {}
+        let docs = detail ? [detail, ...docsOff] : [...docsOff];
         // Timeline enrichment using raw citation if available
         try {
-          const raw0 = (ans as any).citationsRaw?.[0];
+          const raw0 = pairs?.[0]?.raw;
           if (raw0) {
             const items = await ctx.x23.getTimeline(raw0, { scoreMatch: 0.2 });
             const tlDocs: DocChunk[] = items.slice(0, 5).map((it, i) => ({
@@ -468,13 +564,19 @@ export async function findEvidenceForClaim(
           }
         } catch {}
         docs = dedupByUri(docs, opts?.seenUris);
+        // Optional curated source expansion
+        try {
+          const curatedDocs = await maybeExpandWithCuratedSource(ctx, llm, rolePrompt, claim);
+          if (curatedDocs?.length) docs = curatedDocs.concat(docs);
+        } catch {}
         // Optional price expansion
         try {
           const priceDoc = await maybeExpandWithPrice(ctx, llm, rolePrompt, claim);
           if (priceDoc) docs = [priceDoc, ...docs];
         } catch {}
-        cacheMap.set(cacheKey, { ts: now, docs, attempts });
-        return { docs, attempts };
+        const pruned = dedupByUri(docs, opts?.seenUris);
+        cacheMap.set(cacheKey, { ts: now, docs: pruned, attempts });
+        return { docs: pruned, attempts };
       }
     } catch {
       // ignore and fall back
@@ -498,6 +600,11 @@ export async function findEvidenceForClaim(
     const rawDoc = await maybeExpandWithRawPosts(ctx, llm, rolePrompt, claim, exec.docs);
     const offDoc = await maybeExpandWithOfficialDetail(ctx, llm, rolePrompt, claim, exec.docs);
     let docs = [rawDoc, offDoc].filter(Boolean).concat(exec.docs) as DocChunk[];
+    // Optional curated source expansion
+    try {
+      const curatedDocs = await maybeExpandWithCuratedSource(ctx, llm, rolePrompt, claim);
+      if (curatedDocs?.length) docs = curatedDocs.concat(docs);
+    } catch {}
     // Optional price expansion
     try {
       const priceDoc = await maybeExpandWithPrice(ctx, llm, rolePrompt, claim);

@@ -14,6 +14,7 @@ Implemented in `agent-delegate/src/tools/evidence.ts` and used by FactChecker, R
 - LLM‑driven tool selection (`SEARCH_TOOL_SELECTOR_*`) for `keyword`/`vector`/`hybrid`.
 - Optional query rewrite (`QUERY_REWRITE_*`). Disable via `FACT_ENABLE_QUERY_REWRITE=0`.
 - Official‑doc detail (`OFFICIAL_DETAIL_DECISION_*`) and raw forum posts (`RAW_POSTS_DECISION_*`) expansions when snippets are insufficient.
+- Curated source QA (`CURATED_SOURCE_DECISION_*`): LLM may route a question to a specific curated URL (from a catalog) via a crawl‑and‑answer API; results are added as pseudo‑docs with citations.
 - Evidence cache: keyed by `(normalizedClaim,hints)`, TTL `EVIDENCE_CACHE_TTL_MS` (default 600000), with URI de‑duplication.
 - Timeline enrichment: for temporal/process claims (proposal phase, snapshot/onchain votes) via `x23.getTimeline`, mapped into pseudo-docs.
 - Official-first routing: An LLM decision (`OFFICIAL_FIRST_DECISION_*`) determines if a claim is policy/compliance oriented and should query official docs first. Always-on override via `OFFICIAL_FIRST_ALL=1`.
@@ -41,6 +42,22 @@ Implemented in `agent-delegate/src/tools/evidence.ts` and used by FactChecker, R
   - Convenience: `KNOWN_ASSETS.OP_OPTIMISM` exposes OP’s canonical address on Optimism (chainId 10).
 
 Note: Endpoint shapes can vary by account; if your Alchemy account uses different route names, set the `*_PATH` env vars accordingly.
+
+### Curated Source QA
+
+- Files: `agent-delegate/src/tools/curatedCatalog.ts`, `agent-delegate/src/tools/curated.ts`
+- Client: `CuratedSourceQAClient` (available on `ctx.curatedQA` for all agents)
+- Purpose: Route scoped questions to known URLs (e.g., treasury sheet, charter) using x23 `/evaluateOfficialUrl` to answer directly from the specified URL.
+- Catalog: 14 example entries with `id`, `url`, and `scope` (see `curatedCatalog.ts`).
+- LLM decision: `CURATED_SOURCE_DECISION_*` schema; the evidence toolkit adds curated answers and citations when applicable.
+- Implementation details:
+  - Calls `ctx.x23.evaluateOfficialUrl({ protocol, url, question })` where `protocol` is one of the configured `AVAILABLE_PROTOCOLS`, and `url` is the curated source URL.
+  - Returns a pseudo‑doc answer plus citations for traceability.
+
+Example flow:
+- Claim: "What’s the current circulating supply?"
+- Decision: use curated source → `sourceId = treasury_sheet`, `question = "current circulating supply"`
+- The tool calls `/evaluateOfficialUrl` with the selected protocol, the sheet URL, and a concise question; it returns the answer (and rationale when available on the backend).
 
 ## Agent‑Specific Behavior
 

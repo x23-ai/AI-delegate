@@ -136,3 +136,22 @@ export const PRICE_DECISION_SCHEMA = {
   },
   required: ['usePrice'],
 } as const;
+
+// Curated source QA — decide whether to use curated catalog and which source
+export const CURATED_SOURCE_DECISION_PROMPT = [
+  'You decide whether to use a curated source to answer the question, and if so, select the best source and ask a concise question for it.',
+  '- Only use curated sources when the question clearly falls within a source scope.',
+  '- Pick the most specific source; prefer freshness when time-sensitive.',
+  'Return JSON: { useCuratedSource: boolean, sourceId?: string, question?: string, reason?: string }',
+].join('\n');
+
+export const CURATED_SOURCE_DECISION_SCHEMA = {
+  type: 'object',
+  properties: {
+    useCuratedSource: { type: 'boolean' },
+    sourceId: { type: 'string' },
+    question: { type: 'string' },
+    reason: { type: 'string' },
+  },
+  required: ['useCuratedSource'],
+} as const;

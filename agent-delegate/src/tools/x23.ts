@@ -63,6 +63,13 @@ function getDebugLevel(): number {
 }
 const DEBUG_LEVEL = getDebugLevel();
 
+function parseBool(v: unknown): boolean {
+  const s = String(v || '').trim().toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes' || s === 'on';
+}
+
+const INFO_LOG_PARAMS = parseBool(process.env.X23_LOG_PARAMS_INFO || process.env.X23_LOG_PARAMS);
+
 const DEBUG = (() => {
   const v = String(process.env.DEBUG || '').toLowerCase();
   return v === '1' || v === 'true' || v === 'yes';
@@ -82,16 +89,33 @@ export class X23Client {
     };
     if (this.config.apiKey) headers['x-api-key'] = this.config.apiKey;
     const method = (init?.method || 'GET').toUpperCase();
-    // Do not log request bodies at info level
+    // Always log method/path at info; optionally include param preview at info when enabled.
     log.info(`${colors.cyan('x23 request')} → ${method} ${path}`);
-    // Optionally emit request body at debug level
-    if (DEBUG_LEVEL >= 2) {
-      try {
-        const b = (init as any)?.body;
-        const bodyPreview = typeof b === 'string' ? b : b ? JSON.stringify(b) : undefined;
-        if (bodyPreview) log.debug('x23 request body', { method, path, body: bodyPreview });
-      } catch {}
-    }
+    try {
+      const b = (init as any)?.body;
+      const raw = typeof b === 'string' ? b : b ? JSON.stringify(b) : undefined;
+      if (INFO_LOG_PARAMS && raw) {
+        // Produce a concise, sanitized preview for info-level logs
+        let parsed: any = undefined;
+        try { parsed = JSON.parse(raw); } catch { parsed = raw; }
+        const sanitize = (val: any, depth = 0): any => {
+          if (depth > 2) return '[…]';
+          if (typeof val === 'string') return val.length > 240 ? `${val.slice(0, 240)}…` : val;
+          if (Array.isArray(val)) return val.slice(0, 10).map((v) => sanitize(v, depth + 1));
+          if (val && typeof val === 'object') {
+            const out: any = {};
+            Object.keys(val).slice(0, 16).forEach((k) => (out[k] = sanitize(val[k], depth + 1)));
+            return out;
+          }
+          return val;
+        };
+        const preview = sanitize(parsed);
+        log.info(`${colors.cyan('x23 params')} ${method} ${path}`, preview);
+      } else if (DEBUG_LEVEL >= 2 && raw) {
+        // At higher debug level, include full request body at debug
+        log.debug('x23 request body', { method, path, body: raw });
+      }
+    } catch {}
     const spinner = log.spinner(`x23 ${method} ${path}`);
     try {
       metrics.incrementX23Calls();
@@ -215,22 +239,20 @@ export class X23Client {
     return pairs.map((p) => p.doc);
   }
 
-  /** Hybrid search limited to official docs and synthesize an answer with citations. */
-  async officialHybridAnswer(q: SearchQuery & { protocols?: string[]; similarityThreshold?: number; limit?: number; realtime?: boolean }): Promise<AnswerSynthesis> {
-    type Resp = { status: string; result: { results: any[]; answer?: string; rationale?: string[] } };
-    const body = {
-      query: q.query,
-      protocols: q['protocols'] ?? [],
-      limit: q.topK ?? q['limit'] ?? 5,
-      similarityThreshold: q['similarityThreshold'] ?? 0.4,
-      realtime: q['realtime'] ?? false,
-    };
-    const data = await this.req<Resp>('/officialDocSearch', { method: 'POST', body: JSON.stringify(body) });
-    const results = data.result?.results ?? [];
-    const citations = results.map((it) => this.mapItemToDocChunk(it));
-    const ret: AnswerSynthesis = { answer: data.result?.answer ?? '', citations, citationsRaw: results };
-    log.info(`x23 officialDoc detail: ${citations.length} citations, answer=${ret.answer ? 'yes' : 'no'}`);
-    metrics.addDocs(citations.length);
+  /**
+   * Evaluate a specific official URL for an answer to a question.
+   *
+   * Matches x23 /evaluateOfficialUrl in the API spec. Returns an answer string
+   * (when found). Citations are not provided by this endpoint, so this method
+   * returns an empty citations array for compatibility with callers.
+   */
+  async evaluateOfficialUrl(q: { protocol: string; url: string; question: string }): Promise<AnswerSynthesis> {
+    type Resp = { status: string; result: { answer?: string | null; rationale?: string | null } };
+    const body = { protocol: q.protocol, url: q.url, question: q.question };
+    const data = await this.req<Resp>('/evaluateOfficialUrl', { method: 'POST', body: JSON.stringify(body) });
+    const answer = (data.result?.answer ?? '') || '';
+    const ret: AnswerSynthesis = { answer, citations: [] };
+    log.info(`x23 evaluateOfficialUrl: answer=${ret.answer ? 'yes' : 'no'}`);
     return ret;
   }
 
