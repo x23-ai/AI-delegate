@@ -1,115 +1,84 @@
-# Agents & Tooling
+# Agents.md — Agent-Focused Instructions
 
-This document captures how the multi‑agent system is wired, how it retrieves evidence, and which knobs to adjust.
+This file is for coding agents. Humans should read README.md. Agents: follow these steps and conventions to build, run, and modify this workspace safely and consistently.
+
+---
+
+## Repo Map
+
+- Orchestrator: `src/orchestrate.ts` (wires all agents and shared clients)
+- Agents: `src/agents/*.ts` with role prompts in `src/agents/roles/*.md`
+- Evidence toolkit: `src/tools/evidence.ts` (shared retrieval + expansions)
+- x23 client + tools: `src/tools/x23.ts`, curated: `src/tools/curated.ts`, prices: `src/tools/prices.ts`
+- Utilities: `src/utils/*` (logging, metrics, prompt templating, config)
+- API spec: `x23ai API spec.yaml` (maps to methods in `x23.ts`)
+
+## Build & Run
+
+- Node: 18+ recommended.
+- Install deps: `npm ci` (or `npm i`) in `agent-delegate/`.
+- Build: `npm run build` → outputs `dist/`.
+- Dev run: `npm run orchestrate` (tsx) or `npx tsx src/orchestrate.ts`.
+- Required env: `X23_API_KEY`, `OPENAI_API_KEY` (when `LLM_PROVIDER=openai`).
+
+## Tests & Validation
+
+- No unit tests included. Validate by:
+  - Building: `npm run build` (TypeScript should compile cleanly).
+  - Running orchestrator on a sample proposal and inspecting logs + trace JSON.
+- Traces: set `SAVE_TRACE_JSON=1` to write a JSON trace under `dist/`.
+
+## Conventions
+
+- TypeScript ESM (`"type": "module"`); avoid `require`.
+- Keep edits minimal and focused; prefer changing prompts/config before code.
+- Logging:
+  - Use `log.info`/`log.debug`; decision logs should use `colors.magenta(...)` for visibility.
+  - Set `LOG_LEVEL=info|debug`. To log x23 params at info, set `X23_LOG_PARAMS_INFO=1`.
+- LLM JSON extraction: use schemas provided in each agent/tool; keep outputs small and typed.
+- Evidence rules:
+  - Shared toolkit runs tool selection (`keyword|vector|hybrid`) and expansions (`rawPosts`, `officialDetail`, `curatedSource`, `price`).
+  - Curated uses `evaluateOfficialUrl` on one or multiple catalog URLs sequentially.
+  - Timeline enrichment uses `x23.getTimeline` on the top raw/citation.
 
 ## Pipeline
 
 - Planner → Fact Checker → Reasoner → Devil’s Advocate → Judge
-- All agents record auditable steps into a shared `TraceBuilder`, including inputs, outputs, and references (URIs). Optional JSON traces can be saved via `SAVE_TRACE_JSON=1`.
+- All agents record auditable steps via `TraceBuilder` with inputs/outputs/URIs. Set `SAVE_TRACE_JSON=1` to persist a JSON trace.
 
-## Shared Evidence Toolkit
+## Tools (x23, Curated, Prices)
 
-Implemented in `agent-delegate/src/tools/evidence.ts` and used by FactChecker, Reasoner, and Devil’s Advocate:
+- x23 client: `src/tools/x23.ts`
+  - Search: `keywordSearch*`, `vectorSearch*`, `hybridSearch*`
+  - Official URL evaluation: `evaluateOfficialUrl({ protocol, url, question })`
+  - Forum: `getDiscussionPosts`
+  - Timeline: `getTimeline`
+  - Info logs: method/path; enable param previews via `X23_LOG_PARAMS_INFO=1`.
 
-- LLM‑driven tool selection (`SEARCH_TOOL_SELECTOR_*`) for `keyword`/`vector`/`hybrid`.
-- Optional query rewrite (`QUERY_REWRITE_*`). Disable via `FACT_ENABLE_QUERY_REWRITE=0`.
-- Official‑doc detail (`OFFICIAL_DETAIL_DECISION_*`) and raw forum posts (`RAW_POSTS_DECISION_*`) expansions when snippets are insufficient.
-- Curated source QA (`CURATED_SOURCE_DECISION_*`): LLM may route a question to a specific curated URL (from a catalog) via a crawl‑and‑answer API; results are added as pseudo‑docs with citations.
-- Evidence cache: keyed by `(normalizedClaim,hints)`, TTL `EVIDENCE_CACHE_TTL_MS` (default 600000), with URI de‑duplication.
-- Timeline enrichment: for temporal/process claims (proposal phase, snapshot/onchain votes) via `x23.getTimeline`, mapped into pseudo-docs.
-  
+- Curated: `src/tools/curated.ts` + `src/tools/curatedCatalog.ts`
+  - LLM selects `sourceId` or `sourceIds[]`; calls `evaluateOfficialUrl` sequentially; stops at first answer.
 
-### Prices Tool (Alchemy Prices API)
+- Prices: `src/tools/prices.ts`
+  - Spot + historical via Alchemy Prices; governed by `ALCHEMY_PRICES_*` envs.
 
-- File: `agent-delegate/src/tools/prices.ts`
-- Client: `AlchemyPricesClient`
-- Purpose: Fetch current (spot) and historical token prices for assets like OP, to ground arithmetic checks or claims that depend on market prices.
-- Access from agents: via `ctx.prices` (constructed in `orchestrate.ts`) or import the client directly.
-- LLM-driven decision: Agents may ask the LLM whether a price lookup helps via `PRICE_DECISION_*` and, when true, the shared evidence toolkit adds a price pseudo-doc to the evidence set.
-- Env config:
-  - `ALCHEMY_PRICES_API_KEY` (required to use the tool)
-  - `ALCHEMY_PRICES_BASE_URL` (default `https://api.g.alchemy.com/prices/v1`)
-  - `ALCHEMY_PRICES_BY_SYMBOL_PATH` (default `tokens/by-symbol`)
-  - `ALCHEMY_PRICES_BY_ADDRESS_PATH` (default `tokens/by-address`)
-  - `ALCHEMY_PRICES_HIST_PATH` (default `tokens/historical`)
-  - `ALCHEMY_PRICES_SYMBOL_MAP` (optional JSON mapping for symbol→{ network, address })
-    - Example: `{ "OP": { "network": "opt-mainnet", "address": "0x4200...0042" } }`
-- Usage examples:
-  - Spot by symbol: `await new AlchemyPricesClient().getSpotPrice({ symbol: 'OP', currencies: ['USD'] })`
-  - Spot by address: `await new AlchemyPricesClient().getSpotPrice({ asset: { address: '0x4200..0042', network: 'opt-mainnet' }, currencies: ['USD'] })`
-  - Historical by symbol: `await new AlchemyPricesClient().getHistoricalSeries({ symbol: 'OP', start: '2024-01-01', end: '2024-02-01', interval: '1d' })`
-  - Historical by address: `await new AlchemyPricesClient().getHistoricalSeries({ asset: { address: '0x4200..0042', network: 'opt-mainnet' }, start: '2024-01-01', end: '2024-02-01', interval: '1d' })`
-  - Convenience: `KNOWN_ASSETS.OP_OPTIMISM` exposes OP’s canonical address on Optimism (chainId 10).
+## Prompts
 
-Note: Endpoint shapes can vary by account; if your Alchemy account uses different route names, set the `*_PATH` env vars accordingly.
+- Role files under `src/agents/roles/*.md` define persona and guidance.
+- Prompt templating (`src/utils/prompt.ts`) supports placeholders:
+  - `{{protocols}}` from `X23_PROTOCOLS`
+  - `{{forumRoot}}` from `X23_DISCUSSION_URL`
+- Judge’s Goals live in `src/agents/roles/judge.md`; the judge combines stage evidence with these goals.
 
-### Curated Source QA
+## Environment
 
-- Files: `agent-delegate/src/tools/curatedCatalog.ts`, `agent-delegate/src/tools/curated.ts`
-- Client: `CuratedSourceQAClient` (available on `ctx.curatedQA` for all agents)
-- Purpose: Route scoped questions to known URLs (e.g., treasury sheet, charter) using x23 `/evaluateOfficialUrl` to answer directly from the specified URL.
-- Catalog: 14 example entries with `id`, `url`, and `scope` (see `curatedCatalog.ts`).
-- LLM decision: `CURATED_SOURCE_DECISION_*` schema; the evidence toolkit adds curated answers and citations when applicable.
-- Implementation details:
-  - Calls `ctx.x23.evaluateOfficialUrl({ protocol, url, question })` where `protocol` is one of the configured `AVAILABLE_PROTOCOLS`, and `url` is the curated source URL.
-  - Returns a pseudo‑doc answer plus citations for traceability.
+- x23: `X23_API_KEY`, `X23_PROTOCOLS` (comma‑sep, default `optimism`), `X23_DISCUSSION_URL`.
+- LLM: `LLM_PROVIDER` (`openai`|`stub`), `OPENAI_API_KEY`, optional `OPENAI_MODEL`.
+- Prices: `ALCHEMY_PRICES_API_KEY`, optional `ALCHEMY_PRICES_*` paths, `ALCHEMY_PRICES_SYMBOL_MAP`.
+- Evidence: `FACT_ENABLE_QUERY_REWRITE`, `EVIDENCE_CACHE_TTL_MS`.
+- Logging: `LOG_LEVEL`, `DEBUG`, `DEBUG_LEVEL`, `X23_LOG_PARAMS_INFO`.
 
-Example flow:
-- Claim: "What’s the current circulating supply?"
-- Decision: use curated source → `sourceId = treasury_sheet`, `question = "current circulating supply"`
-- The tool calls `/evaluateOfficialUrl` with the selected protocol, the sheet URL, and a concise question; it returns the answer (and rationale when available on the backend).
+## Gotchas
 
-## Agent‑Specific Behavior
-
-- Planner
-  - Uses `planSeedSearch` to generate a concise seed query + protocols; records a planning step, and prepends a task `Seed search corpus: "..." [protocols]` when missing.
-
-- Fact Checker
-  - Builds an initial corpus via `hybridSearch` using the seed plan, plus inline payload docs.
-  - Extracts assumptions and arithmetic checks; runs LLM classification with citations and confidence.
-
-- Reasoner
-  - Starts its argument with "Purpose Breakdown:" (proposers, voters, protocol stewards, affected users), then relates stakeholder purposes to the proposal’s overarching goal.
-  - Iterative search→refine loop up to `REASONER_REFINE_ITERS`, with an explicit decision step to continue/stop (checks: open uncertainties, conflicting premises, missing citations, likely official guidance).
-  - Evidence gathering runs in parallel per iteration (`REASONER_EVIDENCE_CONCURRENCY`), de‑dups by URI, and adds trace rollups: `evidenceCount`, `searchAttempts`, `uniqueCitations`.
-  - Prompts instruct inline citation markers like `(R1)` aligned with numbered evidence in the digest.
-
-- Devil’s Advocate
-  - Gathers external evidence around key premises (parallel, bounded by `DEVILS_EVIDENCE_CONCURRENCY`), focusing on risks/constraints/conflicts.
-  - Produces counterpoints/failure modes with inline citation markers and adds rollups into the trace.
-
-- Judge
-  - Reads role prompt from `src/agents/roles/judge.md`, which now includes a Goals section.
-  - Combines evidence from all stages with the stated Goals to produce a final recommendation (for/against/abstain) with confidence.
-  - Customize goals to reflect governance stance; examples:
-    - Accountant‑style: “Prioritize completeness, auditability, and risk minimization; avoid ambiguity and unbounded scope. Require verifiable owners, budgets, and success metrics.”
-    - Growth‑focused: “Prioritize Superchain expansion, talent attraction, and ecosystem velocity; tolerate calculated risk when potential impact is high and mitigations exist.”
-
-## Prompt Templating
-
-- Use `agent-delegate/src/utils/prompt.ts` to inject variables into role prompts.
-- Currently supported placeholders:
-  - `{{protocols}}`: resolved from `X23_PROTOCOLS`
-  - `{{forumRoot}}`: resolved from `X23_DISCUSSION_URL`
-
-## Configuration Knobs
-
-- Evidence & retrieval
-  - `X23_API_KEY` (required), `X23_PROTOCOLS`, `X23_DISCUSSION_URL`
-  - `FACT_ENABLE_QUERY_REWRITE=0` to disable query rewrite
-  - `EVIDENCE_CACHE_TTL_MS` (default 600000)
-  
-
-- Reasoner
-  - `REASONER_REFINE_ITERS` (default 2)
-  - `REASONER_PREMISE_EVIDENCE_MAX` (default 3)
-  - `REASONER_EVIDENCE_CONCURRENCY` (default 2)
-
-- Devil’s Advocate
-  - `DEVILS_PREMISE_EVIDENCE_MAX` (default 3)
-  - `DEVILS_EVIDENCE_CONCURRENCY` (default 2)
-
-## Validation & Logs
-
-- Config validation runs at startup and fails early on invalid/missing env.
-- Set `DEBUG=1` to log raw LLM JSON/text and x23 responses; tool calls include info‑level summaries and rollups for quick inspection.
+- Keep request bodies concise; many endpoints limit payload size.
+- `evaluateOfficialUrl` returns only `{ answer }`; citations must come from a preceding search (e.g., `hybridSearchRaw` with `itemTypes: ['officialDoc']`).
+- When trying multiple curated URLs, always call sequentially (already implemented).

@@ -1,6 +1,27 @@
 # Agent Delegate
 
-This package orchestrates multi‑agent evaluation of governance proposals (planner → fact checker → reasoner → devil’s advocate → judge) with auditable traces and x23.ai data tools.
+Agent Delegate evaluates governance proposals end‑to‑end and produces a final vote recommendation (for / against / abstain) with rationale and confidence. It uses the x23.ai API for retrieval and supports curated source evaluation and token price lookups.
+
+If you’re a coding agent, see AGENTS.md for build steps, tests, and conventions.
+
+## Quick Start
+
+1) Prerequisites
+- Node.js 18+
+- API keys: `X23_API_KEY` (x23.ai) and `OPENAI_API_KEY` (when `LLM_PROVIDER=openai`)
+
+2) Install
+- From `agent-delegate/`: `npm ci` (or `npm install`)
+
+3) Configure
+- Create `.env` and set:
+  - `X23_API_KEY` (required)
+  - `OPENAI_API_KEY` (required if using OpenAI)
+  - Optional: `X23_PROTOCOLS`, `X23_DISCUSSION_URL`, `LOG_LEVEL`, `DEBUG_LEVEL`, `X23_LOG_PARAMS_INFO`
+
+4) Run
+- Dev run: `npm run orchestrate`
+- Build: `npm run build` then `npm start`
 
 ## What’s New
 
@@ -51,7 +72,13 @@ Provided by `src/tools/evidence.ts` and used by FactChecker, Reasoner, Devil’s
 - Search selection (LLM) → run tool → optional expansions (rawPosts, official-detail).
 - Evidence cache (TTL `EVIDENCE_CACHE_TTL_MS`, default 600000) keyed by `(normalizedClaim,hints)`; de‑dups by `uri`.
 - Timeline enrichment for temporal/process claims via `x23.getTimeline` (mapped to pseudo‑docs).
-- “Official‑first” routing: LLM decides when to consult official docs first; if no citations returned, falls back to other tools.
+
+## Customize The Judge
+
+- Edit `src/agents/roles/judge.md` (Goals section) to reflect your governance stance:
+  - Accountant‑style: prioritize completeness, auditability, and risk minimization
+  - Growth‑focused: prioritize Superchain expansion and talent attraction
+- The judge explicitly weighs all agent outputs against these goals.
 
 ### Prices (Alchemy)
 
