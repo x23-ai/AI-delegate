@@ -86,18 +86,7 @@ export const OFFICIAL_DETAIL_DECISION_SCHEMA = {
 } as const;
 
 // Decide if a claim appears policy/compliance/governance-rules oriented
-export const OFFICIAL_FIRST_DECISION_PROMPT = [
-  'You decide if the claim is policy/compliance/governance-rules oriented and should consult official documentation first.',
-  '- Consider the claim text, provided hints, proposal title/description, and known protocols.',
-  '- Prefer official-doc-first when the claim touches constitutions, charters, mandates, rules, laws, requirement checklists, formal guidelines, framework definitions, or protocol-specific policy docs.',
-  'Return JSON: { preferOfficialFirst: boolean } only.',
-].join('\n');
-
-export const OFFICIAL_FIRST_DECISION_SCHEMA = {
-  type: 'object',
-  properties: { preferOfficialFirst: { type: 'boolean' } },
-  required: ['preferOfficialFirst'],
-} as const;
+// (official-first routing removed)
 
 // Query rewrite (search-optimized, concise)
 export const QUERY_REWRITE_SYSTEM_PROMPT = [
@@ -150,6 +139,7 @@ export const CURATED_SOURCE_DECISION_SCHEMA = {
   properties: {
     useCuratedSource: { type: 'boolean' },
     sourceId: { type: 'string' },
+    sourceIds: { type: 'array', items: { type: 'string' } },
     question: { type: 'string' },
     reason: { type: 'string' },
   },

@@ -42,11 +42,13 @@ export class CuratedSourceQAClient {
     const spinner = log.spinner(`Curated QA (x23 evaluateOfficialUrl): ${sourceId}`);
     const start = Date.now();
     try {
+      try { log.info('Invoking tool evaluateOfficialUrl (curated)', { sourceId, url: src.url, question }); } catch {}
       const res = await this.x23.evaluateOfficialUrl({
         protocol: AVAILABLE_PROTOCOLS[0] || 'optimism',
         url: src.url,
         question,
       });
+      try { log.info('Tool evaluateOfficialUrl returned (curated)', { hasAnswer: !!res.answer, usedUrl: src.url }); } catch {}
       const ms = Date.now() - start;
       spinner.stop(`${colors.green('✓')} Curated QA evaluated ${colors.dim(`(${ms}ms)`)}`);
       const answer: CuratedAnswer = {

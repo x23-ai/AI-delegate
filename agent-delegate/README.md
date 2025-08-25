@@ -5,7 +5,7 @@ This package orchestrates multi‑agent evaluation of governance proposals (plan
 ## What’s New
 
 - Shared evidence toolkit across agents (FactChecker, Reasoner, Devil’s Advocate): LLM tool selection, query rewrite, rawPosts/official-detail expansion, caching + URI de‑dup, timeline enrichment.
-- Official‑docs first: LLM decides if a claim is policy/compliance oriented and should consult official docs first; falls back to other tools if no citations. Global override via `OFFICIAL_FIRST_ALL=1`.
+ 
 - Planner seed planning: planner generates a concise seed search (query + protocols), records it, and prepends a task if missing.
 - Reasoner iterative loop: repeats search→refine up to `REASONER_REFINE_ITERS` with an explicit continue/stop decision and per‑iteration rollups.
 - Prompt templating: role prompts accept `{{protocols}}` and `{{forumRoot}}` via `src/utils/prompt.ts`.
@@ -19,6 +19,7 @@ This package orchestrates multi‑agent evaluation of governance proposals (plan
   - Reasoner: `REASONER_PROMPT_SYSTEM_SUFFIX` (src/agents/reasoner.ts)
   - Devil’s Advocate: `DEVILS_ADVOCATE_PROMPT_SYSTEM_SUFFIX` (src/agents/devilsAdvocate.ts)
   - Judge: `JUDGE_PROMPT_SYSTEM_SUFFIX` (src/agents/judge.ts)
+  - Judge role file: `src/agents/roles/judge.md` includes a Goals section used to weigh tradeoffs. Edit this to align the judge’s stance.
   - Conductor QA/scorers: `CONDUCTOR_*_PROMPT` (src/agents/conductor.ts)
   - Fact Checker: `ASSUMPTION_EXTRACT_SYSTEM_SUFFIX`, `ARITHMETIC_EXTRACT_SYSTEM_SUFFIX`, `CLAIM_CLASSIFY_SYSTEM_SUFFIX` (src/agents/factChecker.ts)
 
@@ -28,7 +29,7 @@ This package orchestrates multi‑agent evaluation of governance proposals (plan
   - `RAW_POSTS_DECISION_PROMPT` + `RAW_POSTS_DECISION_SCHEMA` – decide if raw discussion posts are needed for added context.
   - `QUERY_REWRITE_SYSTEM_PROMPT` + `QUERY_REWRITE_SCHEMA` – rewrite search queries concisely (enabled by default; set `FACT_ENABLE_QUERY_REWRITE=0` to disable).
   - `OFFICIAL_DETAIL_DECISION_PROMPT` + `OFFICIAL_DETAIL_DECISION_SCHEMA` – request official-docs detail after citations when the digest/snippet is insufficient.
-  - `OFFICIAL_FIRST_DECISION_PROMPT` + `OFFICIAL_FIRST_DECISION_SCHEMA` – decide if a claim is policy/compliance oriented and should try official docs first.
+  
 
 - x23 client mapping: `src/tools/x23.ts`
   - Maps API responses to compact `DocChunk` objects using only relevant fields per `agent-delegate/x23ai API spec.yaml`:
@@ -71,6 +72,9 @@ Provided by `src/tools/evidence.ts` and used by FactChecker, Reasoner, Devil’s
 - FactChecker: builds an initial corpus from seed search + payload docs, extracts assumptions and arithmetic checks, and classifies with citations/confidence.
 - Reasoner: starts argument with “Purpose Breakdown:”, iterates search→refine up to `REASONER_REFINE_ITERS` with a dedicated continue/stop decision; parallel evidence gathering per iteration. Adds trace rollups (evidenceCount, searchAttempts, uniqueCitations) and uses inline citation markers like `(R1)`.
 - Devil’s Advocate: runs bounded parallel evidence focusing on risks/constraints/conflicts, produces counterpoints/failure modes with inline markers and rollups.
+- Judge: combines all stage outputs with the Goals stated in `src/agents/roles/judge.md` to produce a final recommendation. Example goal profiles:
+  - Accountant‑style: “Prioritize completeness, auditability, risk minimization; require verifiable owners, budgets, success metrics.”
+  - Growth‑focused: “Prioritize Superchain expansion and talent attraction; accept calculated risks with clear mitigations when impact is high.”
 
 ## Environment Variables
 
@@ -102,7 +106,7 @@ Recommended/Configurable:
  - `DEVILS_PREMISE_EVIDENCE_MAX`: Max premises Devil’s Advocate inspects (default `3`).
  - `DEVILS_EVIDENCE_CONCURRENCY`: Concurrency for Devil’s Advocate evidence gathering (default `2`).
  - `EVIDENCE_CACHE_TTL_MS`: TTL for evidence cache (default `600000`).
- - `OFFICIAL_FIRST_ALL`: When `1`/true/yes, force official-docs first for all claims.
+ 
 
 On‑chain (not required initially):
 

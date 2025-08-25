@@ -10,8 +10,6 @@ import {
   OFFICIAL_DETAIL_DECISION_SCHEMA,
   QUERY_REWRITE_SYSTEM_PROMPT,
   QUERY_REWRITE_SCHEMA,
-  OFFICIAL_FIRST_DECISION_PROMPT,
-  OFFICIAL_FIRST_DECISION_SCHEMA,
   PRICE_DECISION_PROMPT,
   PRICE_DECISION_SCHEMA,
   CURATED_SOURCE_DECISION_PROMPT,
@@ -132,9 +130,11 @@ export async function runSearchTool(
       similarityThreshold: th ?? plan.similarityThreshold,
     };
     if (!broaden && safeItemTypes) params.itemTypes = safeItemTypes;
+    try { log.info('Invoking tool hybrid', params); } catch {}
     const pairs = await (ctx.x23 as any).hybridSearchRaw(params);
     const docs = pairs.map((p: any) => p.doc);
     const raws = pairs.map((p: any) => p.raw);
+    try { log.info('Tool hybrid returned', { resultCount: docs.length }); } catch {}
     attempts.push({
       tool: 'hybrid',
       query: q,
@@ -152,9 +152,11 @@ export async function runSearchTool(
       similarityThreshold: th ?? plan.similarityThreshold,
     };
     if (!broaden && safeItemTypes) params.itemTypes = safeItemTypes;
+    try { log.info('Invoking tool vector', params); } catch {}
     const pairs = await (ctx.x23 as any).vectorSearchRaw(params);
     const docs = pairs.map((p: any) => p.doc);
     const raws = pairs.map((p: any) => p.raw);
+    try { log.info('Tool vector returned', { resultCount: docs.length }); } catch {}
     attempts.push({
       tool: 'vector',
       query: q,
@@ -167,9 +169,11 @@ export async function runSearchTool(
   async function tryKeyword(broaden?: boolean) {
     const params: any = { query: q, topK, protocols };
     if (!broaden && safeItemTypes) params.itemTypes = safeItemTypes;
+    try { log.info('Invoking tool keyword', params); } catch {}
     const pairs = await (ctx.x23 as any).keywordSearchRaw(params);
     const docs = pairs.map((p: any) => p.doc);
     const raws = pairs.map((p: any) => p.raw);
+    try { log.info('Tool keyword returned', { resultCount: docs.length }); } catch {}
     attempts.push({
       tool: 'keyword',
       query: q,
@@ -396,9 +400,10 @@ export async function maybeExpandWithCuratedSource(
     // Prepare a compact catalog for the LLM to select from
     const catalog = CURATED_SOURCES.map((s) => ({ id: s.id, url: s.url, scope: s.scope, answers: s.answers, limits: s.limits, freshness: s.freshness })).slice(0, 20);
     const body = `Claim: ${claim}\nCatalog: ${JSON.stringify(catalog)}`;
-  const dec = await llm.extractJSON<{
+    const dec = await llm.extractJSON<{
       useCuratedSource: boolean;
       sourceId?: string;
+      sourceIds?: string[];
       question?: string;
       reason?: string;
     }>(
@@ -407,18 +412,22 @@ export async function maybeExpandWithCuratedSource(
       CURATED_SOURCE_DECISION_SCHEMA as any,
       { schemaName: 'curatedSourceDecision', maxOutputTokens: 1200, difficulty: 'normal' }
     );
-    if (!dec?.useCuratedSource || !dec.sourceId) return undefined;
+    if (!dec?.useCuratedSource || (!dec.sourceId && !Array.isArray(dec.sourceIds))) return undefined;
     const q = (dec.question || claim).slice(0, 256);
-    try { log.info(colors.magenta('LLM decided to use tool curatedSource'), { sourceId: dec.sourceId, question: q }); } catch {}
-    const ans = await client.answerFromSource({ sourceId: dec.sourceId, question: q });
+    const sourceIds = (Array.isArray(dec.sourceIds) && dec.sourceIds.length ? dec.sourceIds : [dec.sourceId!]).filter(Boolean);
     const docs: DocChunk[] = [];
-    if (ans.answer) {
-      docs.push({ id: `curated:${dec.sourceId}:answer`, title: `Curated: ${dec.sourceId}`, snippet: String(ans.answer).slice(0, 1200), uri: ans.usedUrl, source: 'curated' });
-    }
-    if (Array.isArray(ans.citations)) {
-      ans.citations.slice(0, 5).forEach((c: any, i: number) => {
-        docs.push({ id: `curated:${dec.sourceId}:cite:${i}`, title: c.title || 'Citation', uri: c.url, snippet: c.snippet, source: 'curated' });
-      });
+    for (const sid of sourceIds) {
+      try { log.info(colors.magenta('LLM decided to use tool curatedSource'), { sourceId: sid, question: q }); } catch {}
+      const ans = await client.answerFromSource({ sourceId: sid, question: q });
+      if (ans.answer) {
+        docs.push({ id: `curated:${sid}:answer`, title: `Curated: ${sid}`, snippet: String(ans.answer).slice(0, 1200), uri: ans.usedUrl, source: 'curated' });
+        if (Array.isArray(ans.citations)) {
+          ans.citations.slice(0, 5).forEach((c: any, i: number) => {
+            docs.push({ id: `curated:${sid}:cite:${i}`, title: c.title || 'Citation', uri: c.url, snippet: c.snippet, source: 'curated' });
+          });
+        }
+        break; // stop after first satisfactory answer
+      }
     }
     return docs.length ? docs : undefined;
   } catch {
@@ -468,120 +477,7 @@ export async function findEvidenceForClaim(
     .join('\n');
 
   const tried: any[] = Array.isArray(opts?.priorAttempts) ? [...opts!.priorAttempts!] : [];
-  // Optional: prefer official-doc search first for policy/compliance claims or when globally enabled
   const attempts: any[] = [];
-  const preferOfficialAll = String(process.env.OFFICIAL_FIRST_ALL || '').toLowerCase();
-  let preferOfficial =
-    preferOfficialAll === '1' || preferOfficialAll === 'true' || preferOfficialAll === 'yes';
-  let preferReason: 'env' | 'llm' | 'heuristic' | 'unset' = preferOfficial ? 'env' : 'unset';
-  if (!preferOfficial) {
-    try {
-      const dec = await llm.extractJSON<{ preferOfficialFirst: boolean }>(
-        sys(rolePrompt, OFFICIAL_FIRST_DECISION_PROMPT),
-        `Claim: ${claim}\nHints: ${JSON.stringify(hints || [])}\nTitle: ${ctx.proposal.title || ''}\nDescription: ${String(ctx.proposal.description || '').slice(0, 400)}`,
-        OFFICIAL_FIRST_DECISION_SCHEMA as any,
-        { schemaName: 'officialFirstDecision', maxOutputTokens: 1000, difficulty: 'normal' }
-      );
-      preferOfficial = !!dec?.preferOfficialFirst;
-      preferReason = 'llm';
-    } catch {
-      // fallback heuristic if LLM decision fails
-      preferOfficial = isPolicyLikeClaim(claim) || (hints || []).some((h) => isPolicyHint(h));
-      preferReason = 'heuristic';
-    }
-  }
-  try {
-    log.info(colors.magenta('Official-first decision'), { preferOfficialFirst: preferOfficial, source: preferReason });
-  } catch {}
-  if (preferOfficial) {
-    try {
-      // Optional: rewrite the query for concise, search-optimized form
-      let q = claim.slice(0, 256);
-      try {
-        const rewrite = await llm.extractJSON<{ query: string }>(
-          sys(rolePrompt, QUERY_REWRITE_SYSTEM_PROMPT),
-          `Claim: ${claim}\nTitle: ${ctx.proposal.title || ''}`,
-          QUERY_REWRITE_SCHEMA as any,
-          { schemaName: 'queryRewriteOfficialFirst', maxOutputTokens: 2000, difficulty: 'normal' }
-        );
-        const before = q.trim();
-        const after = (rewrite?.query || '').trim();
-        const mustPreserve: string[] = [];
-        (before.match(/\b\d+\b/g) || []).forEach((m) => mustPreserve.push(m));
-        AVAILABLE_PROTOCOLS.forEach((p) => {
-          if (before.toLowerCase().includes(p)) mustPreserve.push(p);
-        });
-        const preserves = mustPreserve.every((t) => after.toLowerCase().includes(t.toLowerCase()));
-        if (after && after.length <= before.length && preserves) q = after;
-      } catch {}
-
-      // Prefer official docs via hybrid search restricted to officialDoc
-      const pairs = await (ctx.x23 as any).hybridSearchRaw({
-        query: q,
-        topK: 6,
-        protocols: AVAILABLE_PROTOCOLS,
-        itemTypes: ['officialDoc'],
-        similarityThreshold: 0.4,
-      });
-      const docsOff = pairs.map((p: any) => p.doc).slice(0, 6);
-      attempts.push({ tool: 'officialDoc', query: claim, resultCount: docsOff.length });
-      if (docsOff.length > 0) {
-        // Optionally include a detail answer from the top official URL
-        let detail: DocChunk | undefined;
-        try {
-          const top = docsOff[0];
-          if (top?.uri) {
-            const evalAns = await ctx.x23.evaluateOfficialUrl({
-              protocol: AVAILABLE_PROTOCOLS[0] || 'optimism',
-              url: top.uri,
-              question: q,
-            });
-            if (evalAns?.answer) {
-              detail = {
-                id: 'official-detail',
-                title: 'Official doc detail',
-                snippet: String(evalAns.answer).slice(0, 1000),
-                source: 'officialDoc',
-              };
-            }
-          }
-        } catch {}
-        let docs = detail ? [detail, ...docsOff] : [...docsOff];
-        // Timeline enrichment using raw citation if available
-        try {
-          const raw0 = pairs?.[0]?.raw;
-          if (raw0) {
-            const items = await ctx.x23.getTimeline(raw0, { scoreMatch: 0.2 });
-            const tlDocs: DocChunk[] = items.slice(0, 5).map((it, i) => ({
-              id: `tl-${i}-${it.id}`,
-              title: `Timeline: ${it.label}`,
-              uri: it.uri,
-              snippet: `${it.timestamp} ${it.meta?.type ? `[${String(it.meta?.type)}] ` : ''}${it.label}`,
-              source: 'timeline',
-              score: 1,
-            }));
-            docs = tlDocs.concat(docs);
-          }
-        } catch {}
-        docs = dedupByUri(docs, opts?.seenUris);
-        // Optional curated source expansion
-        try {
-          const curatedDocs = await maybeExpandWithCuratedSource(ctx, llm, rolePrompt, claim);
-          if (curatedDocs?.length) docs = curatedDocs.concat(docs);
-        } catch {}
-        // Optional price expansion
-        try {
-          const priceDoc = await maybeExpandWithPrice(ctx, llm, rolePrompt, claim);
-          if (priceDoc) docs = [priceDoc, ...docs];
-        } catch {}
-        const pruned = dedupByUri(docs, opts?.seenUris);
-        cacheMap.set(cacheKey, { ts: now, docs: pruned, attempts });
-        return { docs: pruned, attempts };
-      }
-    } catch {
-      // ignore and fall back
-    }
-  }
 
   for (
     let iter = 0;
@@ -682,13 +578,4 @@ export async function planSeedSearch(
   return seedPlan;
 }
 
-function isPolicyHint(h: string): boolean {
-  const s = (h || '').toLowerCase();
-  return /policy|charter|manual|law|constitution|guideline|rules?|mandate|terms|framework/.test(s);
-}
-function isPolicyLikeClaim(c: string): boolean {
-  const s = (c || '').toLowerCase();
-  return /policy|charter|manual|law|constitution|guideline|rules?|mandate|terms|framework|compliance|official/.test(
-    s
-  );
-}
+// (official-first routing removed)

@@ -7,6 +7,7 @@ import { loadRolePrompt } from '../utils/roles.js';
 // LLM prompts (editable)
 const JUDGE_PROMPT_SYSTEM_SUFFIX = [
   'You are the final judge. Consider each stage output and its confidence.',
+  '- Incorporate the Goals section from your role when weighing tradeoffs. Make explicit how the decision aligns or conflicts with those goals.',
   '- Rationale: describe your internal thought process, explicitly weighing pros and cons based on Planner, FactChecker, Reasoner, and Devil’s Advocate conclusions. Be transparent about tradeoffs and key uncertainties.',
   "- Reason: a concise, publication-ready explanation of the vote for onchain posting (no more than 2-3 sentences).",
   'Produce JSON with recommendation, rationale, reason, and confidence (0..1).',

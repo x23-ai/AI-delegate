@@ -244,20 +244,21 @@ export const CURATED_SOURCES: CuratedSource[] = [
   {
     id: 'superchain-2025-strategic-focus-dashboard',
     url: 'https://app.hex.tech/61bffa12-d60b-484c-80b9-14265e268538/app/SHARED-Superchain-2025-Strategic-Focus-Dashboard-6PG9Tq3k1A32g5K8vk8vBu/latest',
-    scope: 'Dashboard outlining 2025 strategic priorities and progress for Superchain',
+    scope: 'Dashboard outlining 2025 strategic score cards and metrics for Superchain',
     answers: [
-      'what are Superchain’s strategic goals for 2025',
-      'progress toward 2025 objectives',
+      'what are Superchain’s key metric scorecards',
+      'app fees per day',
       'superchain key metrics',
     ],
     limits: ['governance charters', 'detailed metrics outside strategy scope', 'financial data'],
     freshness: 'Live via HEX dashboard—updates as underlying data changes',
     examples: {
       good: [
-        'What is Superchain focusing on in 2025?',
-        'Is the strategic dashboard up-to-date?',
         'what is the current TVL across Superchain',
         'what are the app fees paid',
+        'what are transaction fees per day',
+        'what is the superchain revenue per day',
+        'what is median gas fee per transaction',
       ],
       bad: ["Explain the Security Council's powers.", 'What is the OP circulating supply?'],
     },

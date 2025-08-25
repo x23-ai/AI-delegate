@@ -17,7 +17,7 @@ Implemented in `agent-delegate/src/tools/evidence.ts` and used by FactChecker, R
 - Curated source QA (`CURATED_SOURCE_DECISION_*`): LLM may route a question to a specific curated URL (from a catalog) via a crawl‑and‑answer API; results are added as pseudo‑docs with citations.
 - Evidence cache: keyed by `(normalizedClaim,hints)`, TTL `EVIDENCE_CACHE_TTL_MS` (default 600000), with URI de‑duplication.
 - Timeline enrichment: for temporal/process claims (proposal phase, snapshot/onchain votes) via `x23.getTimeline`, mapped into pseudo-docs.
-- Official-first routing: An LLM decision (`OFFICIAL_FIRST_DECISION_*`) determines if a claim is policy/compliance oriented and should query official docs first. Always-on override via `OFFICIAL_FIRST_ALL=1`.
+  
 
 ### Prices Tool (Alchemy Prices API)
 
@@ -78,6 +78,13 @@ Example flow:
   - Gathers external evidence around key premises (parallel, bounded by `DEVILS_EVIDENCE_CONCURRENCY`), focusing on risks/constraints/conflicts.
   - Produces counterpoints/failure modes with inline citation markers and adds rollups into the trace.
 
+- Judge
+  - Reads role prompt from `src/agents/roles/judge.md`, which now includes a Goals section.
+  - Combines evidence from all stages with the stated Goals to produce a final recommendation (for/against/abstain) with confidence.
+  - Customize goals to reflect governance stance; examples:
+    - Accountant‑style: “Prioritize completeness, auditability, and risk minimization; avoid ambiguity and unbounded scope. Require verifiable owners, budgets, and success metrics.”
+    - Growth‑focused: “Prioritize Superchain expansion, talent attraction, and ecosystem velocity; tolerate calculated risk when potential impact is high and mitigations exist.”
+
 ## Prompt Templating
 
 - Use `agent-delegate/src/utils/prompt.ts` to inject variables into role prompts.
@@ -91,7 +98,7 @@ Example flow:
   - `X23_API_KEY` (required), `X23_PROTOCOLS`, `X23_DISCUSSION_URL`
   - `FACT_ENABLE_QUERY_REWRITE=0` to disable query rewrite
   - `EVIDENCE_CACHE_TTL_MS` (default 600000)
-  - `OFFICIAL_FIRST_ALL=1` to force official‑first for all claims
+  
 
 - Reasoner
   - `REASONER_REFINE_ITERS` (default 2)
