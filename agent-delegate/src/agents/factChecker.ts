@@ -101,11 +101,22 @@ export const FactSleuth: FactCheckerAgent = {
     // Seed searches to build an initial corpus
     log.info(`FactChecker: building corpus with seed query '${seedQuery}'`);
     const seedTopK = Number(process.env.FACT_SEED_TOPK || (process.env.QUICK_MODE ? '6' : '12'));
-    const initialResults = await ctx.x23.hybridSearch({
+    let initialResults = await ctx.x23.hybridSearch({
       query: seedQuery,
       topK: Math.max(1, Math.min(20, seedTopK)),
       protocols: seedProtocols,
     });
+    // If the seed search is too sparse under the default protocols, broaden across all supported protocols
+    const minSeedResults = Math.max(1, Math.min(5, Number(process.env.FACT_SEED_MIN_RESULTS || 2)));
+    if ((initialResults?.length || 0) < minSeedResults) {
+      log.info('FactChecker: seed search sparse under default protocols; broadening across all protocols');
+      initialResults = await ctx.x23.hybridSearch({
+        query: seedQuery,
+        topK: Math.max(1, Math.min(20, seedTopK)),
+        // Empty protocols means: include all supported protocols (per API spec)
+        protocols: [],
+      });
+    }
 
     // Trace the seed plan for auditability
     ctx.trace.addStep({

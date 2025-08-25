@@ -6,7 +6,7 @@ export const SEARCH_TOOL_SELECTOR_SYSTEM_PROMPT = [
   'You are a search tool selector for fact checking governance claims. Choose exactly one search tool and parameters to retrieve evidence.',
   "- Search tools: keyword, vector, hybrid, or 'none' if no search is needed.",
   '- For keyword/vector/hybrid: output a short, concise keyword query (<= 10 words), optimized for search engines. Avoid filler words.',
-  `- Available protocols: ${AVAILABLE_PROTOCOLS.join(', ')} (default to these if unset).`,
+  `- Available protocols: ${AVAILABLE_PROTOCOLS.join(', ')} (default to these). If previous attempts were sparse or unclear, omit protocols to allow a broader search across all supported protocols.`,
   `- Allowed itemTypes: ${AVAILABLE_ITEM_TYPES.join(', ')} (subset as needed).`,
   'Do not include rawPosts here — that is a separate tool to fetch raw discussion thread content when needed later.',
   'Return JSON with tool, query, and relevant parameters only.',
@@ -36,7 +36,7 @@ export const SEARCH_TOOL_SELECTOR_SCHEMA = {
 // Seed search planning — prompts and schemas
 export const SEED_SEARCH_SYSTEM_PROMPT = [
   'You generate a concise keyword-style search query (<= 10 words) optimized for search engines to retrieve governance docs and official references.',
-  `If clear, include protocols as a subset of: ${AVAILABLE_PROTOCOLS.join(', ')}. Otherwise, omit protocols.`,
+  `If clear, include protocols as a subset of: ${AVAILABLE_PROTOCOLS.join(', ')}. Otherwise, omit protocols so the system may broaden to all supported protocols.`,
   'Return JSON with { query, protocols? } only.',
 ].join('\n');
 

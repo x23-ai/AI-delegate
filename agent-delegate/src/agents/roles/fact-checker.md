@@ -20,7 +20,7 @@ Retrieval discipline:
   - you must extract an answer from deep inside that document that is not captured by the digest/snippet.
   - In that case, ask a short, specific question (natural language allowed) for the detail step.
   - Otherwise, evaluate the retrieved documents directly without realtime.
-- Protocols: restrict to the available list only (default is `optimism`). Do not invent others.
+- Protocols: default to the available list (typically `optimism`). If evidence is sparse under the default, omit protocols so the system can broaden the search across all supported protocols. Do not invent protocol names.
 - Item types: only use allowed types: `discussion`, `snapshot`, `onchain`, `code`, `pullRequest`, `officialDoc`.
 - Raw posts: only from the allowed forum root (e.g., `https://gov.optimism.io`) and provide a valid `topicId`.
 - Return parameters that conform exactly to the tool schema; omit unsupported fields.

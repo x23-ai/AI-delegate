@@ -126,7 +126,8 @@ export async function runSearchTool(
     const params: any = {
       query: q,
       topK,
-      protocols,
+      // When broaden=true, search across all supported protocols by passing an empty list
+      protocols: broaden ? [] : protocols,
       similarityThreshold: th ?? plan.similarityThreshold,
     };
     if (!broaden && safeItemTypes) params.itemTypes = safeItemTypes;
@@ -148,7 +149,8 @@ export async function runSearchTool(
     const params: any = {
       query: q,
       topK,
-      protocols,
+      // When broaden=true, search across all supported protocols by passing an empty list
+      protocols: broaden ? [] : protocols,
       similarityThreshold: th ?? plan.similarityThreshold,
     };
     if (!broaden && safeItemTypes) params.itemTypes = safeItemTypes;
@@ -167,7 +169,7 @@ export async function runSearchTool(
     return { docs, raws };
   }
   async function tryKeyword(broaden?: boolean) {
-    const params: any = { query: q, topK, protocols };
+    const params: any = { query: q, topK, protocols: broaden ? [] : protocols };
     if (!broaden && safeItemTypes) params.itemTypes = safeItemTypes;
     try { log.info('Invoking tool keyword', params); } catch {}
     const pairs = await (ctx.x23 as any).keywordSearchRaw(params);
@@ -191,7 +193,11 @@ export async function runSearchTool(
       const lowered = Math.max(0.15, (plan.similarityThreshold ?? 0.4) - 0.1);
       ({ docs, raws } = await tryHybrid(lowered, true));
     }
-    if (docs.length === 0) docs = await tryKeyword(true);
+    if (docs.length === 0) {
+      const res = await tryKeyword(true);
+      docs = res.docs;
+      raws = res.raws;
+    }
     return { docs, attempts, raws };
   }
   if (plan.tool === 'vector') {
