@@ -286,16 +286,12 @@ export const CURATED_SOURCES: CuratedSource[] = [
   {
     id: 'govfund-grants-tracking',
     url: 'https://docs.google.com/spreadsheets/d/1Ul8iMTsOFUKUmqz6MK0zpgt8Ki8tFtoWKGlwXj-Op34/edit?gid=1179446718',
-    scope: 'Spreadsheet tracking GovFund grants and their statuses',
-    answers: ['which grants are active or completed', 'beneficiary or funding amounts per grant'],
+    scope: 'Spreadsheet tracking GovFund grants and their statuses, e.g. grant seasons',
+    answers: ['which grants were approved or rejected', 'beneficiary or funding amounts per grant'],
     limits: ['charter governance processes', 'tokenomics', 'technical metrics'],
     freshness: 'Live spreadsheet; presumably updated regularly',
     examples: {
-      good: [
-        'What grants have been approved recently?',
-        'How many GovFund grants are open?',
-        'has project X received grant funding',
-      ],
+      good: ['has project X received grant funding', 'how much was the grant amount for project Y'],
       bad: ['What is the Security Council’s role?', 'OP token inflation rate?'],
     },
     notes: 'Shared via Google Sheets; access may be required.',
