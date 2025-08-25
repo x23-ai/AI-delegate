@@ -20,11 +20,17 @@ If you’re contributing to the code, see `AGENTS.md` for build steps, tests, an
 - Create an `.env` file with at minimum:
   - `X23_API_KEY=...`
   - `OPENAI_API_KEY=...` (when using OpenAI)
+  - `ALCHEMY_PRICES_API_KEY=....`
   - Optional: `X23_PROTOCOLS=optimism`, `X23_DISCUSSION_URL=https://gov.optimism.io`, `LOG_LEVEL=info`
 
-4. Run
+4. Load proposal
 
-- Dev run: `npm run orchestrate -- --proposal-id 1001`
+- Add proposal text context in `/evaluate` directory
+- Context should be either json, md, or txt files.
+
+5. Run
+
+- Dev run: `npm run orchestrate` or `npm run orchestrate-quick`
 - Build then run: `npm run build && npm start`
 
 ## What It Does

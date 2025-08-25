@@ -1,4 +1,7 @@
+# 🚧 Still a WIP 🚧
+
 # Building AI Delegates
+
 Supported by Optimism: https://github.com/ethereum-optimism/ecosystem-contributions/issues/277#issuecomment-2820956333
 
 This monorepo includes:
@@ -18,7 +21,7 @@ See AGENTS.md for detailed repo guidelines and development instructions.
   - Evidence cache with TTL and URI de‑duplication
   - Timeline enrichment for process/chronology claims
 - Official‑docs first decision
-  - LLM decides if a claim is policy/compliance oriented (OFFICIAL_FIRST_DECISION_*); when true (or OFFICIAL_FIRST_ALL=1), query official docs first, fall back otherwise
+  - LLM decides if a claim is policy/compliance oriented (OFFICIAL*FIRST_DECISION*\*); when true (or OFFICIAL_FIRST_ALL=1), query official docs first, fall back otherwise
 - Planner seed planning
   - Planner bootstraps a seed search query and records it as a planning step; adds a task like: `Seed search corpus: "..." [protocols]`
 - Reasoner iterative loop

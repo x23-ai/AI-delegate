@@ -11,6 +11,7 @@
     "lint": "eslint . --ext .ts",
     "format": "prettier --write .",
     "orchestrate": "tsx src/orchestrate.ts",
+    "orchestrate-quick": "tsx src/orchestrate.ts --quick",
     "test:prices": "tsx scripts/test-prices.ts"
   },
   "license": "MIT",
