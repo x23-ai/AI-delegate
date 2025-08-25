@@ -165,7 +165,7 @@ On‑chain (not required initially):
 
 ## Passing Proposal Parameters
 
-You can pass proposal details via CLI args or an import file. Precedence: CLI > file. There is no env fallback for proposal fields.
+You can pass proposal details via CLI args, a directory of files, or a single import file. Precedence: CLI > directory > file. For `id`, provide it via CLI or in the directory/file (as a last resort, `PROPOSAL_ID` env is honored).
 
 - CLI args:
 
@@ -173,7 +173,16 @@ You can pass proposal details via CLI args or an import file. Precedence: CLI > 
   - `--title "My Proposal"`
   - `--desc "Evaluate scope and budget."`
   - `--input import/proposal.json` (path to JSON file)
+  - `--input evaluate` or `--input-dir evaluate` (path to a directory)
   - `--payload-file import/payload.json` (optional; JSON array of payload items)
+
+- Directory input: default path `agent-delegate/evaluate/`
+  - Place any mix of `.json`, `.md`/`.mdx`, `.txt`, `.yaml`/`.yml`, `.csv`/`.tsv` in this directory (recursively).
+  - The loader will:
+    - Merge `id`, `title`, `description`, and `payload` from any JSON files (preferring `proposal.json` if present).
+    - Ingest the raw contents of all text files as payload items of type `file` with `data` set to the file’s text and `uri` set to `file://<relative-path>`.
+    - Derive `description` from `README.md`/`proposal.md` if not provided elsewhere; first markdown heading becomes `title` when missing.
+  - Example: `npm run orchestrate -- --proposal-id 123` with files in `evaluate/`.
 
 - Import file (JSON): default path `agent-delegate/import/proposal.json`
   - Example contents:
